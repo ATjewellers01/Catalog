@@ -36,10 +36,15 @@ import {
 } from "lucide-react";
 import Footer from "../components/Footer";
 import Subcategories from "../components/Subcategories";
+import supabase from "../SupabaseClient";
 
 const AdminDashboard = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
+   const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+    const [updatingUserId, setUpdatingUserId] = useState(null); // for loading per user
+
   const location = useLocation();
   const {
     jewellery,
@@ -47,7 +52,7 @@ const AdminDashboard = () => {
     updateJewellery,
     deleteJewellery,
     getCategories,
-    bookings,
+   
     addBooking,
     clearAllBookings,
   } = useJewellery();
@@ -72,6 +77,34 @@ const AdminDashboard = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(12);
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+
+  // Add this state variable near your other state declarations
+const [showAddUserModal, setShowAddUserModal] = useState(false);
+// Update the newUser state to remove ID and use username
+const [newUser, setNewUser] = useState({
+  username: "",
+  password: "",
+  phoneNumber: "",
+  role: "user", // Default role set to "user"
+  status: "active"
+});
+
+// Update the resetUserForm function
+const resetUserForm = () => {
+  setNewUser({ 
+    username: "", 
+    password: "", 
+    phoneNumber: "", 
+    role: "user", 
+    status: "active" 
+  });
+  setShowAddUserModal(false);
+};
+
+
+
+
 
   // Handle navigation from category page
   useEffect(() => {
@@ -83,33 +116,62 @@ const AdminDashboard = () => {
     }
   }, [location.state]);
 
-  const users = [
-    { id: "user1", name: "John Doe", password: "pass123", status: "active" },
-    {
-      id: "user2",
-      name: "Jane Smith",
-      password: "pass456",
-      status: "inactive",
-    },
-    {
-      id: "user3",
-      name: "Mike Johnson",
-      password: "pass789",
-      status: "active",
-    },
-    {
-      id: "user4",
-      name: "Sarah Wilson",
-      password: "pass101",
-      status: "active",
-    },
-    {
-      id: "user5",
-      name: "David Brown",
-      password: "pass202",
-      status: "inactive",
-    },
-  ];
+ // Add this near your other state declarations
+const [orders, setOrders] = useState([]);
+const [loadingOrders, setLoadingOrders] = useState(false);
+
+// Add this function to fetch orders from Supabase
+const fetchOrdersFromSupabase = async () => {
+  try {
+    setLoadingOrders(true);
+    console.log("🔄 Fetching orders from Supabase...");
+
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select('*,users(*)')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching orders:', error);
+      throw new Error('Failed to fetch orders from database');
+    }
+
+    console.log("✅ Orders fetched from Supabase:", orders);
+    setOrders(orders || []);
+    
+    // If you want to also update the bookings state (for backward compatibility)
+    // You can transform the orders data to match your bookings format
+    const transformedBookings = (orders || []).map(order => ({
+      id: order.id,
+      userName: order.customer_name,
+      phoneNumber: order.phone_number,
+      category: order.items?.[0]?.category || 'General',
+      jewelleryName: order.items?.map(item => item.name).join(', ') || 'Multiple Items',
+      grams: order.total_weight,
+      price: order.total_amount,
+      bookingDate: order.created_at,
+      status: order.status,
+      items: order.items || [],
+      // Add other fields as needed
+    }));
+
+    // If you're using a context that manages bookings, you might want to update it
+    // Otherwise, you can use the local orders state
+
+  } catch (error) {
+    console.error('❌ Failed to load orders from Supabase:', error);
+    setOrders([]);
+  } finally {
+    setLoadingOrders(false);
+  }
+};
+
+// Call this function when the component mounts or when the bookings tab is active
+useEffect(() => {
+  if (activeTab === 'bookings') {
+    fetchOrdersFromSupabase();
+  }
+}, [activeTab]);
 
   const [newJewellery, setNewJewellery] = useState({
     category: "",
@@ -127,13 +189,20 @@ const AdminDashboard = () => {
   // Resolve public assets with Vite base (safe join)
   const asset = (name) => {
     if (!name) return name;
+    
+    // If it's already a full URL (including Supabase storage URL), return as-is
+    if (name.startsWith('http') || name.startsWith('https')) {
+      return name;
+    }
+    
+    // Handle local assets
     const base = import.meta.env.BASE_URL || "/";
     const cleanBase = base.endsWith("/") ? base.slice(0, -1) : base;
     const clean = name.startsWith("/") ? name.slice(1) : name;
     return `${cleanBase}/${clean}`;
   };
 
-  // Fallback default images for categories (used when localStorage is empty or invalid)
+  // Fallback default images for categories (used when Supabase is empty)
   function getDefaultCategoryImages() {
     return {
       Animals: { Default: [asset("/download.jpg")] },
@@ -148,55 +217,68 @@ const AdminDashboard = () => {
     };
   }
 
-  // Load category images from localStorage or use defaults with error handling
-  const [categoryImages, setCategoryImages] = useState(() => {
+  // Load category images from Supabase
+  const [categoryImages, setCategoryImages] = useState({});
+  const [uniqueCategories, setUniqueCategories] = useState(["All"]);
+
+  // Function to fetch categories from Supabase
+  const fetchCategoriesFromSupabase = async () => {
     try {
-      const saved = localStorage.getItem("admin-category-images-data");
-      console.log("🔍 Raw localStorage data:", saved);
+      setLoadingCategories(true);
+      console.log("🔄 Fetching categories from Supabase...");
 
-      if (
-        saved &&
-        saved !== "undefined" &&
-        saved !== "{}" &&
-        saved !== "null"
-      ) {
-        const parsedData = JSON.parse(saved);
-        console.log(
-          "✅ Successfully loaded category images from localStorage:",
-          parsedData
-        );
+      const { data: categories, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-        // Validate the data structure
-        if (
-          parsedData &&
-          typeof parsedData === "object" &&
-          Object.keys(parsedData).length > 0
-        ) {
-          console.log("✅ Data structure is valid, returning loaded data");
-          console.log("📊 Loaded categories:", Object.keys(parsedData));
-          return parsedData;
-        } else {
-          console.warn("⚠️ Invalid or empty data structure, using defaults");
-          console.log("📊 Parsed data:", parsedData);
-        }
+      if (error) {
+        console.error('Error fetching categories:', error);
+        throw new Error('Failed to fetch categories from database');
+      }
+
+      console.log("✅ Categories fetched from Supabase:", categories);
+
+      if (categories && categories.length > 0) {
+        // Convert Supabase data to your local state format
+        const categoryImagesFromDB = {};
+        const categoryNames = ['All']; // Always include 'All' category
+
+        categories.forEach(category => {
+          categoryImagesFromDB[category.category_name] = {
+            Default: [category.image_url],
+          };
+          categoryNames.push(category.category_name);
+        });
+
+        // Update state
+        setCategoryImages(categoryImagesFromDB);
+        setUniqueCategories(categoryNames);
+        
+        console.log('📊 Processed categories:', categoryNames);
+        console.log('📊 Category images data:', categoryImagesFromDB);
       } else {
-        console.log(
-          "ℹ️ No saved data found or data is empty/null/undefined, using defaults"
-        );
-        console.log("📊 Saved value:", saved);
+        // If no categories in Supabase, use defaults
+        console.log("ℹ️ No categories found in Supabase, using defaults");
+        const defaultImages = getDefaultCategoryImages();
+        setCategoryImages(defaultImages);
+        setUniqueCategories(["All", ...Object.keys(defaultImages)]);
       }
     } catch (error) {
-      console.error(
-        "❌ Error loading category images from localStorage:",
-        error
-      );
-      console.log("🔄 Falling back to default data");
+      console.error('❌ Failed to load categories from Supabase:', error);
+      // Fallback to default images
+      const defaultImages = getDefaultCategoryImages();
+      setCategoryImages(defaultImages);
+      setUniqueCategories(["All", ...Object.keys(defaultImages)]);
+    } finally {
+      setLoadingCategories(false);
     }
+  };
 
-    // Return default images if no saved data or error occurred
-    console.log("📋 Using default category images");
-    return getDefaultCategoryImages();
-  });
+  // Load categories from Supabase on component mount
+  useEffect(() => {
+    fetchCategoriesFromSupabase();
+  }, []);
 
   const getCategoryCover = (category) => {
     const categoryData = categoryImages[category];
@@ -214,7 +296,7 @@ const AdminDashboard = () => {
     // Handle both string URLs and photo objects
     const firstPhoto = photos[0];
     if (typeof firstPhoto === "string") {
-      return firstPhoto; // Return the base64 string directly
+      return firstPhoto; // Return the URL directly (could be Supabase URL or base64)
     } else if (firstPhoto && firstPhoto.url) {
       return asset(firstPhoto.url);
     }
@@ -243,9 +325,6 @@ const AdminDashboard = () => {
     }
     setExpandedSets(newExpanded);
   };
-
-  // Categories from context to keep Admin and Catalogue in sync
-  const [uniqueCategories, setUniqueCategories] = useState(getCategories());
 
   // Category stats for unique categories
   const categoryStats = useMemo(() => {
@@ -302,102 +381,6 @@ const AdminDashboard = () => {
 
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-
-  // Verification: Ensure localStorage data is not overwritten after mount
-  useEffect(() => {
-    console.log(
-      "🔄 AdminDashboard mounted, verifying localStorage integrity..."
-    );
-
-    const saved = localStorage.getItem("admin-category-images-data");
-    console.log("🔍 Post-mount localStorage check:", saved);
-
-    if (saved && saved !== "undefined" && saved !== "{}" && saved !== "null") {
-      try {
-        const parsedData = JSON.parse(saved);
-        console.log("🔍 Post-mount parsed data:", parsedData);
-
-        // Check if current state matches localStorage
-        const currentKeys = Object.keys(categoryImages);
-        const savedKeys = Object.keys(parsedData);
-
-        console.log("📊 Current state categories:", currentKeys);
-        console.log("📊 localStorage categories:", savedKeys);
-
-        // If localStorage has more categories than current state, update state
-        if (savedKeys.length > currentKeys.length) {
-          console.log("🔄 localStorage has more data, updating state");
-          setCategoryImages(parsedData);
-        } else if (
-          JSON.stringify(categoryImages) !== JSON.stringify(parsedData)
-        ) {
-          console.log("🔄 Data mismatch detected, syncing with localStorage");
-          setCategoryImages(parsedData);
-        } else {
-          console.log("✅ Data is synchronized correctly");
-        }
-      } catch (error) {
-        console.error("❌ Error verifying localStorage data:", error);
-      }
-    } else {
-      console.log("ℹ️ No valid localStorage data found after mount");
-    }
-  }, []); // Run only once after mount
-
-  // Auto-save categoryImages to localStorage whenever they change
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        "admin-category-images-data",
-        JSON.stringify(categoryImages)
-      );
-      console.log("✅ Category images saved to localStorage:", categoryImages);
-    } catch (err) {
-      console.error("❌ Failed to save category images to localStorage:", err);
-    }
-  }, [categoryImages]);
-
-  // Ensure uniqueCategories includes any categories present in categoryImages (persists after refresh)
-  useEffect(() => {
-    if (!categoryImages) return;
-    const keys = Object.keys(categoryImages).filter((k) => k && k !== "All");
-    if (!keys.length) return;
-
-    setUniqueCategories((prev) => {
-      const merged = Array.from(new Set([...(prev || []), ...keys]));
-      // Always ensure "All" is at index 0
-      const withoutAll = merged.filter((c) => c !== "All");
-      return ["All", ...withoutAll];
-    });
-  }, [categoryImages]);
-
-  // Auto-save categoryImages to localStorage whenever they change
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        "admin-category-images-data",
-        JSON.stringify(categoryImages)
-      );
-      // Optional: console log for confirmation
-      console.log("✅ Category images saved to localStorage:", categoryImages);
-    } catch (err) {
-      console.error("❌ Failed to save category images to localStorage:", err);
-    }
-  }, [categoryImages]);
-
-  // Ensure uniqueCategories includes any categories present in categoryImages (persists after refresh)
-  useEffect(() => {
-    if (!categoryImages) return;
-    const keys = Object.keys(categoryImages).filter((k) => k && k !== "All");
-    if (!keys.length) return;
-
-    setUniqueCategories((prev) => {
-      const merged = Array.from(new Set([...(prev || []), ...keys]));
-      // Always ensure "All" is at index 0 if present
-      const withoutAll = merged.filter((c) => c !== "All");
-      return ["All", ...withoutAll];
-    });
-  }, [categoryImages]);
 
   // Handle scroll for back-to-top button visibility
   useEffect(() => {
@@ -725,33 +708,6 @@ const AdminDashboard = () => {
     console.log("PDF generated with bookings data:", bookingsData);
   };
 
-  // Debug function to check localStorage data
-  const debugLocalStorage = () => {
-    const saved = localStorage.getItem("admin-category-images-data");
-    console.log("🔍 Current localStorage data:", saved);
-    console.log("🔍 Parsed data:", saved ? JSON.parse(saved) : "No data");
-    console.log("🔍 Current state data:", categoryImages);
-    console.log("🔍 State keys:", Object.keys(categoryImages));
-    console.log(
-      "🔍 localStorage keys:",
-      saved ? Object.keys(JSON.parse(saved)) : "No data"
-    );
-    alert("Check console for detailed localStorage debug info");
-  };
-
-  // Function to clear localStorage (for testing)
-  const clearCategoryStorage = () => {
-    if (
-      window.confirm(
-        "Are you sure you want to clear all category images from localStorage? This cannot be undone."
-      )
-    ) {
-      localStorage.removeItem("admin-category-images-data");
-      console.log("🗑️ localStorage cleared");
-      window.location.reload(); // Reload to reset state
-    }
-  };
-
   const handleCategoryFileUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -765,7 +721,74 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleAddCategory = (e) => {
+    const fetchUsers = async () => {
+    try {
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from("users")       // your Supabase table
+        .select("*")         // fetch all columns
+        .order("created_at", { ascending: false }); // optional: order by creation time
+
+      if (error) throw error;
+
+      setUsers(data || []);
+    } catch (err) {
+      console.error("Error fetching users:", err);
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch users on component mount
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+const handleAddUser = async (e) => {
+  e.preventDefault();
+
+   if (!newUser.username || !newUser.password) {
+    alert("Name and password are required.");
+    return;
+  }
+
+  try {
+    
+
+    // 2. Insert new user
+    const { data, error } = await supabase
+      .from('users') // your Supabase table
+      .insert([
+        {
+         
+          user_name: newUser.username,
+          password: newUser.password,
+          role:newUser.role,
+          phone_number:newUser.phoneNumber,
+          status: newUser.status || "active",
+        },
+      ]);
+
+    if (error) throw error;
+
+    console.log("New user added:", data);
+    alert(`User "${newUser.username}" added successfully!`);
+
+    // 3. Reset form and close modal
+   resetUserForm();
+    setShowAddUserModal(false);
+
+    // 4. Optional: refresh local users state
+     fetchUsers(); 
+  } catch (err) {
+    console.error("Error adding user:", err);
+    alert("Something went wrong while adding the user.");
+  }
+};
+
+  const handleAddCategory = async (e) => {
     e.preventDefault();
     if (!newCategory.name || !newCategory.image) {
       alert("Please fill in all required fields");
@@ -782,23 +805,67 @@ const AdminDashboard = () => {
       return;
     }
 
-    // Create new category with image
-    const updatedCategoryImages = {
-      ...categoryImages,
-      [newCategory.name]: {
-        Default: [newCategory.image], // Store as simple string for new categories
-      },
-    };
+    try {
+      // Upload image to Supabase storage if it's a new file
+      let imageUrl = newCategory.image;
 
-    console.log("Adding new category:", newCategory.name);
-    console.log("New category data:", updatedCategoryImages[newCategory.name]);
+      // Check if it's a base64 image (new upload)
+      if (newCategory.image.startsWith('data:image')) {
+        const fileName = `category_${Date.now()}_${Math.random().toString(36).substring(2, 15)}.jpg`;
+        
+        // Convert base64 to blob
+        const response = await fetch(newCategory.image);
+        const blob = await response.blob();
+        
+        // Upload to Supabase storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('category_image')
+          .upload(fileName, blob, {
+            cacheControl: '3600',
+            upsert: false
+          });
 
-    // Update local state immediately
-    setUniqueCategories((prev) => [...prev, newCategory.name]);
-    setCategoryImages(updatedCategoryImages);
+        if (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          throw new Error('Failed to upload image');
+        }
 
-    alert(`"${newCategory.name}" category added successfully with image!`);
-    resetCategoryForm();
+        // Get public URL
+        const { data: publicUrlData } = supabase.storage
+          .from('category_image')
+          .getPublicUrl(fileName);
+
+        imageUrl = publicUrlData.publicUrl;
+      }
+
+      // Prepare category data for Supabase
+      const categoryData = {
+        category_name: newCategory.name,
+        description: newCategory.description || '',
+        image_url: imageUrl,
+      };
+
+      // Insert into Supabase categories table
+      const { data: insertedCategory, error: insertError } = await supabase
+        .from('categories')
+        .insert([categoryData])
+        .select();
+
+      if (insertError) {
+        console.error('Error inserting category:', insertError);
+        throw new Error('Failed to save category to database');
+      }
+
+      // Refresh categories from Supabase to get the latest data
+      await fetchCategoriesFromSupabase();
+
+      alert(`"${newCategory.name}" category added successfully with image!`);
+      resetCategoryForm();
+
+    } catch (error) {
+      console.error('Error adding category:', error);
+      alert(`Error adding category: ${error.message}`);
+    }
   };
 
   const resetCategoryForm = () => {
@@ -812,6 +879,31 @@ const AdminDashboard = () => {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  const handleToggleStatus = async (userId, newStatus) => {
+    try {
+      setUpdatingUserId(userId); // show loading for this user
+      const { error } = await supabase
+        .from("users")
+        .update({ status: newStatus })
+        .eq("id", userId);
+      if (error) throw error;
+
+      // Update local state
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId ? { ...u, status: newStatus } : u
+        )
+      );
+    } catch (err) {
+      console.error("Error updating user status:", err);
+      alert("Failed to update user status.");
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
+
 
   return (
     <div className="flex overflow-x-hidden flex-col pb-20 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -865,7 +957,6 @@ const AdminDashboard = () => {
             {/* Navigation */}
             <nav className="flex-1 p-4 space-y-2">
               {[
-                //
                 { id: "categories", label: "Categories", icon: Package },
                 { id: "bookings", label: "User Bookings", icon: BookOpen },
                 { id: "users", label: "User Management", icon: Users },
@@ -1063,7 +1154,12 @@ const AdminDashboard = () => {
                   </button>
                 </div>
 
-                {!selectedCategory || selectedCategory === "All" ? (
+                {loadingCategories ? (
+                  <div className="flex justify-center items-center py-16">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                    <span className="ml-4 text-gray-600">Loading categories...</span>
+                  </div>
+                ) : !selectedCategory || selectedCategory === "All" ? (
                   <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
                     {uniqueCategories.slice(1).map((category) => (
                       <div
@@ -1078,6 +1174,9 @@ const AdminDashboard = () => {
                             src={getCategoryCover(category)}
                             alt={category}
                             className="object-cover w-full h-56 transition-transform duration-500 sm:h-52 md:h-60 group-hover:scale-105"
+                            onError={(e) => {
+                              e.target.src = asset("download.jpg");
+                            }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t to-transparent from-black/60 via-black/10" />
                           <div className="absolute right-0 bottom-0 left-0 p-4">
@@ -1253,224 +1352,152 @@ const AdminDashboard = () => {
             )}
 
             {/* Bookings Tab */}
-            {activeTab === "bookings" && (
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-                <div className="flex flex-col p-3 space-y-3 border-b border-gray-200 sm:flex-row sm:justify-between sm:items-center sm:p-6 sm:space-y-0">
-                  <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">
-                    User Bookings
-                  </h2>
-                  <div className="flex items-center space-x-2 sm:space-x-3">
-                    <button
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            "Are you sure you want to clear all bookings? This action cannot be undone."
-                          )
-                        ) {
-                          clearAllBookings();
-                          alert("All bookings have been cleared!");
-                        }
-                      }}
-                      className="flex items-center px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm text-white bg-red-600 rounded transition-colors hover:bg-red-700"
-                    >
-                      <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
-                      <span className="ml-1">Clear All</span>
-                    </button>
-                  </div>
-                </div>
-                <div className="p-3 sm:p-6">
-                  <div className="space-y-6">
-                    {bookings.length ? (
-                      <div className="overflow-hidden bg-white rounded-lg border border-gray-200 shadow-sm">
-                        <div className="px-6 py-4 border-b border-gray-200">
-                          <div className="flex justify-between items-center">
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              User Bookings
-                            </h3>
+     
+{activeTab === "bookings" && (
+  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+    <div className="flex flex-col p-3 space-y-3 border-b border-gray-200 sm:flex-row sm:justify-between sm:items-center sm:p-6 sm:space-y-0">
+      <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">
+        User Bookings (Orders)
+      </h2>
+      <div className="flex items-center space-x-2 sm:space-x-3">
+        <button
+          onClick={handleGenerateGramsPDF}
+          className="flex items-center px-3 py-2 text-white bg-green-600 rounded-lg shadow-md transition-all hover:bg-green-700 hover:shadow-lg"
+        >
+          <FileText className="w-4 h-4" />
+          <span className="ml-2 text-sm font-medium">Generate PDF</span>
+        </button>
+      </div>
+    </div>
+    <div className="p-3 sm:p-6">
+      <div className="space-y-6">
+        {orders.length > 0 ? (
+          <div className="overflow-hidden bg-white rounded-lg border border-gray-200 shadow-sm">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Order History
+                </h3>
+                <span className="text-sm text-gray-500">
+                  {orders.length} order{orders.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
+                      Order ID
+                    </th>
+                    <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
+                      Customer
+                    </th>
+                    <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
+                      Items
+                    </th>
+                    <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
+                      Total Weight
+                    </th>
+                   
+                 
+                    <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
+                      Date
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {orders.map((order) => (
+                    <tr key={order.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                        #{order.id}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 w-10 h-10">
+                            <div className="flex justify-center items-center w-10 h-10 font-bold text-white bg-gradient-to-br from-blue-500 to-purple-600 rounded-full">
+                              {order.users.user_name?.charAt(0).toUpperCase() || 'U'}
+                            </div>
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">
+                              {order.users.user_name || 'Unknown Customer'}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {order.users.phone_number || 'No phone'}
+                            </div>
                           </div>
                         </div>
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                                  User
-                                </th>
-                                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                                  PDF
-                                </th>
-                                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                                  Items
-                                </th>
-                                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                                  Weight
-                                </th>
-                                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                                  Category
-                                </th>
-                                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                                  Jewelry Names
-                                </th>
-                                <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">
-                                  <div className="flex items-center space-x-4">
-                                    <span>Date</span>
-                                    <FileText
-                                      className="w-4 h-4 text-gray-400"
-                                      title="PDF Available"
-                                    />
-                                  </div>
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                              {(() => {
-                                const groupedBookings = bookings.reduce(
-                                  (acc, booking) => {
-                                    const userKey = booking.userName;
-                                    if (!acc[userKey]) {
-                                      acc[userKey] = [];
-                                    }
-                                    acc[userKey].push(booking);
-                                    return acc;
-                                  },
-                                  {}
-                                );
-
-                                return Object.entries(groupedBookings).map(
-                                  ([userName, userBookings]) => (
-                                    <tr
-                                      key={userName}
-                                      className="hover:bg-gray-50"
-                                    >
-                                      <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center">
-                                          <div className="flex-shrink-0 w-10 h-10">
-                                            <div className="flex justify-center items-center w-10 h-10 font-bold text-white bg-gradient-to-br from-blue-500 to-purple-600 rounded-full">
-                                              {userName.charAt(0).toUpperCase()}
-                                            </div>
-                                          </div>
-                                          <div className="ml-4">
-                                            <div className="text-sm font-medium text-gray-900">
-                                              {userName}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </td>
-                                      <td className="px-6 py-4 whitespace-nowrap">
-                                        <button
-                                          onClick={handleGenerateGramsPDF}
-                                          className="flex items-center px-3 py-2 text-white bg-green-600 rounded-lg shadow-md transition-all hover:bg-green-700 hover:shadow-lg"
-                                        >
-                                          <FileText className="w-4 h-4" />
-                                          <span className="ml-2 text-sm font-medium">
-                                            Essential PDF
-                                          </span>
-                                        </button>
-                                      </td>
-                                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                                        {userBookings.length} item
-                                        {userBookings.length > 1 ? "s" : ""}
-                                      </td>
-                                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                                        {userBookings
-                                          .reduce(
-                                            (sum, b) =>
-                                              sum +
-                                              (typeof b.grams === "number"
-                                                ? b.grams
-                                                : parseFloat(b.grams) || 0),
-                                            0
-                                          )
-                                          .toFixed(2)}
-                                        g
-                                      </td>
-                                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                                        <div className="flex flex-wrap gap-1">
-                                          {Object.entries(
-                                            userBookings.reduce(
-                                              (acc, booking) => {
-                                                acc[booking.category] =
-                                                  (acc[booking.category] || 0) +
-                                                  1;
-                                                return acc;
-                                              },
-                                              {}
-                                            )
-                                          ).map(([category, count]) => (
-                                            <span
-                                              key={category}
-                                              className="px-2 py-1 text-xs text-gray-700 bg-gray-100 rounded"
-                                            >
-                                              {category}: {count}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </td>
-                                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                                        <div className="flex flex-wrap gap-1">
-                                          {userBookings.map((booking) => (
-                                            <span
-                                              key={booking.id}
-                                              className="px-2 py-1 text-xs text-gray-700 bg-gray-100 rounded"
-                                            >
-                                              {booking.jewelleryName ||
-                                                booking.name}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </td>
-                                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
-                                        {new Date(
-                                          userBookings[0].bookingDate
-                                        ).toLocaleDateString()}
-                                      </td>
-                                    </tr>
-                                  )
-                                );
-                              })()}
-                            </tbody>
-                          </table>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900">
+                          {order.items?.length || 0} item{order.items?.length !== 1 ? 's' : ''}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="py-16 text-center bg-gray-50 rounded-xl border-2 border-gray-300 border-dashed">
-                        <div className="flex justify-center items-center mx-auto mb-4 w-20 h-20 bg-gray-100 rounded-full">
-                          <svg
-                            className="w-10 h-10 text-gray-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={1.5}
-                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                            />
-                          </svg>
+                        <div className="text-xs text-gray-500 max-w-xs truncate">
+                          {order.items?.map(item => item.name).join(', ') || 'No items'}
                         </div>
-                        <h3 className="mb-2 text-lg font-semibold text-gray-900">
-                          No bookings yet
-                        </h3>
-                        <p className="text-gray-600">
-                          User bookings will appear here when customers make
-                          purchases
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+                      </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+  {order.items && order.items.length > 0
+    ? `${order.items.reduce((total, item) => total + Number(item.weight || 0), 0)}g`
+    : 'N/A'}
+</td>
+ 
+                      <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                        {new Date(order.created_at).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="py-16 text-center bg-gray-50 rounded-xl border-2 border-gray-300 border-dashed">
+            <div className="flex justify-center items-center mx-auto mb-4 w-20 h-20 bg-gray-100 rounded-full">
+              <svg
+                className="w-10 h-10 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+            </div>
+            <h3 className="mb-2 text-lg font-semibold text-gray-900">
+              No orders yet
+            </h3>
+            <p className="text-gray-600">
+              Customer orders will appear here when they make purchases
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
 
             {/* Users Tab */}
             {activeTab === "users" && (
               <div className="space-y-6">
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
-                  <div className="p-6 border-b border-gray-200">
+                   <div className="flex flex-col p-6 space-y-4 border-b border-gray-200 sm:flex-row sm:justify-between sm:items-center sm:space-y-0">
                     <h2 className="text-xl font-semibold text-gray-900">
                       User Management
                     </h2>
+                    {/* Add Users Button - Top Right */}
+<button
+  onClick={() => setShowAddUserModal(true)}
+  className="flex items-center px-4 py-2 space-x-2 text-white bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg shadow-md transition-all hover:from-green-600 hover:to-emerald-600"
+>
+  <Plus className="w-4 h-4" />
+  <span>Add User</span>
+</button>
                   </div>
                   <div className="p-6">
                     {/* Desktop Table View */}
@@ -1481,7 +1508,7 @@ const AdminDashboard = () => {
                             <tr>
                               {[
                                 "Name",
-                                "ID",
+                                "Role",
                                 "Password",
                                 "Status",
                                 "Actions",
@@ -1499,10 +1526,10 @@ const AdminDashboard = () => {
                             {users.map((u) => (
                               <tr key={u.id} className="hover:bg-gray-50">
                                 <td className="px-6 py-4 text-sm text-gray-900">
-                                  {u.name}
+                                  {u.user_name}
                                 </td>
                                 <td className="px-6 py-4 text-sm text-gray-900">
-                                  {u.id}
+                                  {u.role}
                                 </td>
                                 <td className="px-6 py-4 text-sm text-gray-900">
                                   {"•".repeat(u.password.length)}
@@ -1518,21 +1545,31 @@ const AdminDashboard = () => {
                                     {u.status}
                                   </span>
                                 </td>
-                                <td className="px-6 py-4 text-sm text-gray-900">
+                                <td className="px-6 py-4 text-sm  text-gray-900">
                                   <button
-                                    onClick={() =>
-                                      console.log("Toggle user status")
-                                    }
-                                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors ${
-                                      u.status === "active"
-                                        ? "bg-red-100 text-red-800 hover:bg-red-200"
-                                        : "bg-green-100 text-green-800 hover:bg-green-200"
-                                    }`}
-                                  >
-                                    {u.status === "active"
-                                      ? "Deactivate"
-                                      : "Activate"}
-                                  </button>
+                        onClick={() => handleToggleStatus(u.id, "active")}
+                        disabled={updatingUserId === u.id}
+                        className={`px-3 py-2 rounded-lg text-xs font-medium mr-3 ${
+                          u.status === "active"
+                            ? "text-white bg-green-600 font-semibold cursor-not-allowed"
+                            : "text-white bg-green-500 font-semibold hover:bg-green-200"
+                        }`}
+                      >
+                        {updatingUserId === u.id && "Updating..."}
+                        {updatingUserId !== u.id && "Activate"}
+                      </button>
+                      <button
+                        onClick={() => handleToggleStatus(u.id, "inactive")}
+                        disabled={updatingUserId === u.id}
+                        className={`px-3 py-2 rounded-lg text-xs font-medium  ${
+                          u.status === "inactive"
+                            ? "text-white bg-red-700 font-semibold cursor-not-allowed"
+                            : "text-white  bg-red-500 font-semibold hover:bg-red-200"
+                        }`}
+                      >
+                        {updatingUserId === u.id && "Updating..."}
+                        {updatingUserId !== u.id && "Deactivate"}
+                      </button>
                                 </td>
                               </tr>
                             ))}
@@ -1542,80 +1579,63 @@ const AdminDashboard = () => {
                     </div>
 
                     {/* Mobile Card View */}
-                    <div className="space-y-4 md:hidden">
-                      {users.map((u) => (
-                        <div
-                          key={u.id}
-                          className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm transition-shadow hover:shadow-md"
-                        >
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <h3 className="mb-1 text-lg font-semibold text-gray-900">
-                                {u.name}
-                              </h3>
-                              <p className="text-sm text-gray-600">
-                                ID: {u.id}
-                              </p>
-                            </div>
-                            <span
-                              className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${
-                                u.status === "active"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-red-100 text-red-800"
-                              }`}
-                            >
-                              {u.status}
-                            </span>
-                          </div>
+                <div className="space-y-4 md:hidden">
+  {users.map((u) => (
+    <div
+      key={u.id}
+      className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm transition-shadow hover:shadow-md"
+    >
+      <div className="flex justify-between items-start mb-3">
+        <div>
+          <h3 className="mb-1 text-lg font-semibold text-gray-900">
+            {u.user_name}
+          </h3>
+          <p className="text-md text-gray-900">{u.role}</p>
+        </div>
+        <span
+          className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${
+            u.status === "active"
+              ? "bg-green-100 text-green-800"
+              : "bg-red-100 text-red-800"
+          }`}
+        >
+          {u.status}
+        </span>
+      </div>
 
-                          <div className="flex justify-between items-center">
-                            <div className="text-sm text-gray-600">
-                              Password: {"•".repeat(u.password.length)}
-                            </div>
-                            <button
-                              onClick={() => {
-                                // Toggle user status functionality
-                                const updatedUsers = users.map((user) =>
-                                  user.id === u.id
-                                    ? {
-                                        ...user,
-                                        status:
-                                          user.status === "active"
-                                            ? "inactive"
-                                            : "active",
-                                      }
-                                    : user
-                                );
-                                // Here you would typically update the users state or call an API
-                                console.log(
-                                  "User status toggled for:",
-                                  u.id,
-                                  "New status:",
-                                  u.status === "active" ? "inactive" : "active"
-                                );
-                                // For now, just show an alert
-                                alert(
-                                  `User ${u.name} status changed to ${
-                                    u.status === "active"
-                                      ? "inactive"
-                                      : "active"
-                                  }`
-                                );
-                              }}
-                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                u.status === "active"
-                                  ? "bg-red-100 text-red-800 hover:bg-red-200"
-                                  : "bg-green-100 text-green-800 hover:bg-green-200"
-                              }`}
-                            >
-                              {u.status === "active"
-                                ? "Deactivate"
-                                : "Activate"}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+      <div className="flex justify-between items-center mt-2">
+        <div className="text-sm text-gray-600">
+          Password: {"•".repeat(u.password.length)}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleToggleStatus(u.id, "active")}
+            disabled={updatingUserId === u.id}
+            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+              u.status === "active"
+                ? "bg-green-200 text-green-900 cursor-not-allowed"
+                : "bg-green-100 text-green-800 hover:bg-green-200"
+            }`}
+          >
+            {updatingUserId === u.id ? "Updating..." : "Activate"}
+          </button>
+          <button
+            onClick={() => handleToggleStatus(u.id, "inactive")}
+            disabled={updatingUserId === u.id}
+            className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+              u.status === "inactive"
+                ? "bg-red-200 text-red-900 cursor-not-allowed"
+                : "bg-red-100 text-red-800 hover:bg-red-200"
+            }`}
+          >
+            {updatingUserId === u.id ? "Updating..." : "Deactivate"}
+          </button>
+        </div>
+      </div>
+    </div>
+  ))}
+</div>
+
                   </div>
                 </div>
               </div>
@@ -1991,6 +2011,121 @@ const AdminDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Add User Modal */}
+{/* Add User Modal */}
+{showAddUserModal && (
+  <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black bg-opacity-50">
+    <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="flex justify-between items-center p-6 border-b border-gray-200">
+        <h3 className="text-xl font-semibold text-gray-900">
+          Add New User
+        </h3>
+        <button
+          onClick={resetUserForm}
+          className="p-2 text-gray-400 rounded-lg hover:text-gray-600 hover:bg-gray-100"
+        >
+          <X className="w-6 h-6" />
+        </button>
+      </div>
+
+      <div className="overflow-y-auto flex-1 p-6">
+        <form id="addUserForm" onSubmit={handleAddUser} className="space-y-4">
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700">
+              Username *
+            </label>
+            <input
+              type="text"
+              value={newUser.username}
+              onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+              placeholder="Enter username"
+              className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700">
+              Password *
+            </label>
+            <input
+              type="password"
+              value={newUser.password}
+              onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+              placeholder="Enter password"
+              className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              required
+            />
+          </div>
+
+          {/* Phone Number Field */}
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700">
+              Phone Number *
+            </label>
+            <input
+              type="tel"
+              value={newUser.phoneNumber}
+              onChange={(e) => setNewUser({ ...newUser, phoneNumber: e.target.value })}
+              placeholder="Enter phone number"
+              className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              required
+            />
+          </div>
+
+          {/* Role Dropdown Field */}
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700">
+              Role *
+            </label>
+            <select
+              value={newUser.role}
+              onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+              className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            >
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700">
+              Status
+            </label>
+            <select
+              value={newUser.status}
+              onChange={(e) => setNewUser({ ...newUser, status: e.target.value })}
+              className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </form>
+      </div>
+
+      <div className="flex-shrink-0 p-6 pt-4 bg-gray-50 border-t border-gray-200">
+        <div className="flex space-x-4">
+          <button
+            type="button"
+            onClick={resetUserForm}
+            className="flex-1 px-6 py-3 font-medium text-gray-700 bg-gray-100 rounded-xl transition-colors hover:bg-gray-200"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="addUserForm"
+            className="flex-1 px-6 py-3 font-medium text-white bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl shadow-lg transition-all hover:from-green-600 hover:to-emerald-600"
+          >
+            Add User
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Back to Top Button */}
       {showBackToTop && (

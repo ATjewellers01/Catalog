@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import supabase from '../SupabaseClient';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -16,26 +17,44 @@ const Login = () => {
   
   const from = location.state?.from?.pathname || '/';
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
 
-    try {
-      // Extract username from email (before @) for AuthContext compatibility
-      const username = email.split('@')[0];
-      const result = await login(username, password);
-      if (result.success) {
-        navigate(from, { replace: true });
-      } else {
-        setError(result.error || 'Login failed');
-      }
-    } catch (err) {
-      setError('An error occurred during login');
-    } finally {
-      setIsLoading(false);
+
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError('');
+  setIsLoading(true);
+
+  try {
+    // Extract username from email (before @)
+    const username = email.split('@')[0];
+
+    // Query Supabase users table
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('phone_number', username)
+      .eq('phone_number', password) 
+      .eq('status','active') // ⚠️ only for demo, not secure in production
+      .single();
+
+    if (error || !data) {
+      setError('Invalid credentials',error);
+    } else {
+      // Save full user data in localStorage
+      localStorage.setItem('users', JSON.stringify(data));
+
+      // (Optional) also update your AuthContext if you want
+      login(data.user_name, password);
+
+      navigate(from, { replace: true });
     }
-  };
+  } catch (err) {
+    setError('An error occurred during login');
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -49,7 +68,7 @@ const Login = () => {
               Jewelley
             </span>
           </Link>
-          <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
+          <h2 className="text-3xl font-bold text-gray-900">Welcome Back </h2>
           <p className="mt-2 text-gray-600">Sign in to your account</p>
         </div>
 

@@ -1,4 +1,7 @@
+// src/context/AuthContext.js
 import { createContext, useContext, useState, useEffect } from 'react';
+import supabase from '../SupabaseClient';
+
 
 const AuthContext = createContext();
 
@@ -14,64 +17,56 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Load user from localStorage on app start
   useEffect(() => {
-    // Check if user is logged in (from localStorage)
-    const savedUser = localStorage.getItem('aj_user');
+    const savedUser = localStorage.getItem('users');
     if (savedUser) {
       setUser(JSON.parse(savedUser));
     }
     setIsLoading(false);
   }, []);
 
-  const login = async (id, password) => {
+  // Supabase login
+  const login = async (username, password) => {
     try {
       setIsLoading(true);
 
-      console.log('Login attempt:', id, password);
+      // Query Supabase users table
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('phone_number', username) // match user_name column
+        .eq('phone_number', password)  // ⚠️ plain text for demo only
+        .single();
 
-      // Check credentials (case insensitive for id)
-      if (id.toLowerCase() === 'admin' && password === 'admin123') {
-        const userData = {
-          id: 'admin',
-          name: 'Administrator',
-          role: 'admin'
-        };
-        setUser(userData);
-        localStorage.setItem('aj_user', JSON.stringify(userData));
-        console.log('Login successful for admin');
-        return { success: true };
-      } else if (id.toLowerCase() === 'user' && password === 'user123') {
-        const userData = {
-          id: 'user',
-          name: 'Regular User',
-          role: 'user'
-        };
-        setUser(userData);
-        localStorage.setItem('aj_user', JSON.stringify(userData));
-        console.log('Login successful for user');
-        return { success: true };
-      } else {
-        console.log('Invalid credentials');
-        return { success: false, error: 'Invalid ID or password' };
+      if (error || !data) {
+        return { success: false, error: 'Invalid username or password' };
       }
-    } catch (error) {
-      console.error('Login error:', error);
+
+      // Save user data
+      setUser(data);
+      localStorage.setItem('users', JSON.stringify(data));
+
+      return { success: true };
+    } catch (err) {
+      console.error('Login error:', err);
       return { success: false, error: 'Login failed' };
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Logout
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('aj_user');
+    localStorage.removeItem('users');
   };
 
   const value = {
     user,
     login,
     logout,
-    isLoading
+    isLoading,
   };
 
   return (

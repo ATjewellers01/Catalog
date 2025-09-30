@@ -1,113 +1,54 @@
+// UserDashboard.jsx
 import React, { useState, useEffect, useMemo } from "react";
-// Removed jsPDF import as PDF generation is disabled
 import { useAuth } from "../context/AuthContext";
-import {
-  ShoppingCart,
-  History,
-  Package,
-  LogOut,
-  X,
-  Eye,
-  Search,
-  Filter,
-  Grid3X3,
-  List,
-  Heart,
-  Star,
-  ChevronDown,
-  CheckCircle,
-  Clock,
-  Truck,
-  Shield,
-  User,
-  Bell,
-  Settings,
-  Gem,
-  Award,
-  TrendingUp,
-  ArrowRight,
-  Calendar,
-  CreditCard,
-  ChevronLeft,
-  ChevronRight,
-  Users,
-  BookOpen,
-  Edit3,
-  Trash2,
-  Crown,
-  Shirt,
-  Circle,
-  Sparkles,
-  Menu,
+import { 
+  ShoppingCart, 
+  Package, 
+  History, 
+  LogOut, 
+  ChevronLeft, 
+  ChevronRight, 
+  Menu, 
   ArrowUp,
+  CheckCircle,
+  X,
+  Calendar
 } from "lucide-react";
 import { useJewellery } from "../context/JewelleryContext";
 import Footer from "../components/Footer";
-import Subcategories from "../components/Subcategories";
+import Cart from "../components/Cart";
+import CategoryProducts from "../components/CategoryProducts";
+import OrderHistory from "../components/OrderHistory";
+import Sidebar from "../components/Sidebar";
+import supabase from "../SupabaseClient";
 
 const UserDashboard = () => {
   const { user, logout } = useAuth();
-  const [minWeight, setMinWeight] = useState("");
-  const [maxWeight, setMaxWeight] = useState("");
-  const {
-    jewellery,
-    addJewellery,
-    updateJewellery,
-    deleteJewellery,
-    getCategories,
-    addBooking,
-  } = useJewellery();
+  const { jewellery, addBooking } = useJewellery();
 
-  const userBookings = [];
-
-  // Mock data for admin bookings and users
-  const adminBookings = [];
-
-  const users = [];
-
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [imagePreview, setImagePreview] = useState("");
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  // State declarations
+  const [activeTab, setActiveTab] = useState("catalog");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [myOrders, setMyOrders] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showCartModal, setShowCartModal] = useState(false);
   const [showOrderSuccessModal, setShowOrderSuccessModal] = useState(false);
   const [clickedItems, setClickedItems] = useState(new Set());
   const [orderJustPlaced, setOrderJustPlaced] = useState(false);
-  const [showOrderDetailsModal, setShowOrderDetailsModal] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [showCartModal, setShowCartModal] = useState(false);
-
-  const [newJewellery, setNewJewellery] = useState({
-    category: "",
-    name: "",
-    description: "",
-    price: "",
-    image: "",
-    quantity: 1,
-    weight: "",
-  });
-
-  const [activeTab, setActiveTab] = useState("catalog");
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [cart, setCart] = useState([]);
-  const [myOrders, setMyOrders] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [viewMode, setViewMode] = useState("grid");
-  const [sortBy, setSortBy] = useState("name");
-  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [minWeight, setMinWeight] = useState("");
+  const [maxWeight, setMaxWeight] = useState("");
+  const [sortBy, setSortBy] = useState("weight");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(12);
-  const [wishlist, setWishlist] = useState([]);
   const [toast, setToast] = useState(null);
-
-  const sortOptions = [
-    { value: "name", label: "Name A-Z" },
-    { value: "price-low", label: "Price: Low to High" },
-    { value: "price-high", label: "Price: High to Low" },
-    { value: "rating", label: "Highest Rated" },
-  ];
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [cartItemsCount, setCartItemsCount] = useState(0); // Add this state for cart count
 
   // Prevent automatic scroll restoration
   useEffect(() => {
@@ -115,7 +56,6 @@ const UserDashboard = () => {
       history.scrollRestoration = "manual";
     }
 
-    // Prevent any scroll behavior on category changes
     const preventScroll = () => {
       window.scrollTo(0, 0);
     };
@@ -130,7 +70,7 @@ const UserDashboard = () => {
     };
   }, []);
 
-  // Responsive sidebar behavior: open on desktop, closed on mobile
+  // Responsive sidebar behavior
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
     const handleChange = () => {
@@ -162,10 +102,6 @@ const UserDashboard = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
   // Reset order just placed flag when switching away from cart tab
   useEffect(() => {
     if (activeTab !== "cart") {
@@ -173,377 +109,340 @@ const UserDashboard = () => {
     }
   }, [activeTab]);
 
-  // Categories pulled from JewelleryContext to stay perfectly in sync with catalogue
-  const categories = getCategories();
+  // Fetch cart items count
+// Fix the fetchCartItemsCount function
+const fetchCartItemsCount = async () => {
+  try {
+    const userData = localStorage.getItem('users');
+    if (!userData) return;
 
-  // Resolve public assets with Vite base (safe join)
-  const asset = (name) => {
-    if (!name) return name;
-    const base = import.meta.env.BASE_URL || "/";
-    const cleanBase = base.endsWith("/") ? base.slice(0, -1) : base;
-    const clean = name.startsWith("/") ? name.slice(1) : name;
-    return `${cleanBase}/${clean}`;
+    const user = JSON.parse(userData);
+    const userId = user.id;
+
+    if (!userId) return;
+
+    // FIXED: table name is 'cart_item' not 'cart_items'
+    const { data, error } = await supabase
+      .from('cart_item') // Changed from 'cart_items'
+      .select('id, quantity')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error fetching cart count:', error);
+      return;
+    }
+
+    const totalItems = data?.reduce((total, item) => total + (parseInt(item.quantity) || 0), 0) || 0;
+    setCartItemsCount(totalItems);
+
+  } catch (error) {
+    console.error('Error in fetchCartItemsCount:', error);
+  }
+};
+
+  // Fetch categories
+  const fetchCategories = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("*");
+
+      if (error) {
+        console.error("Error fetching categories:", error.message);
+        setCategories([]);
+      } else {
+        console.log("Fetched categories successfully", data);
+        setCategories(data);
+      }
+    } catch (error) {
+      console.error("Error in fetchCategories:", error);
+      setCategories([]);
+    }
+    setLoading(false);
   };
 
-  // Category images with subcategories (mirrors AdminCategoryPage)
-  const [categoryImages, setCategoryImages] = useState({
-    Animals: {
-      Lion: [
-        {
-          url: asset("download.jpg"),
-          description: "Beautiful lion pendant with intricate detailing",
-          weight: "15g",
-        },
-        {
-          url: asset("download (1).jpg"),
-          description: "Elegant lion necklace showcasing craftsmanship",
-          weight: "20g",
-        },
-      ],
-      Tiger: [
-        {
-          url: asset("download (2).jpg"),
-          description: "Stunning tiger brooch with vibrant colors",
-          weight: "18g",
-        },
-      ],
-      Elephant: [
-        {
-          url: asset("download (3).jpg"),
-          description: "Majestic elephant ring symbolizing wisdom",
-          weight: "25g",
-        },
-      ],
-    },
-    "Arabic Style 21k": {
-      Necklace: [
-        {
-          url: asset("download (2).jpg"),
-          description: "Traditional Arabic necklace in 21k gold",
-          weight: "30g",
-        },
-      ],
-      Bracelet: [
-        {
-          url: asset("images.jpg"),
-          description: "Elegant Arabic bracelet with cultural motifs",
-          weight: "22g",
-        },
-      ],
-      Ring: [
-        {
-          url: asset("download (3).jpg"),
-          description: "Authentic Arabic style ring design",
-          weight: "12g",
-        },
-      ],
-    },
-    Rings: {
-      Diamond: [
-        {
-          url: asset("download (1).jpg"),
-          description: "Sparkling diamond ring with premium cut",
-          weight: "8g",
-        },
-      ],
-      Sapphire: [
-        {
-          url: asset("download (2).jpg"),
-          description: "Beautiful sapphire ring with blue brilliance",
-          weight: "10g",
-        },
-      ],
-      Ruby: [
-        {
-          url: asset("download (3).jpg"),
-          description: "Vivid ruby ring showcasing deep red color",
-          weight: "9g",
-        },
-      ],
-    },
-    Earrings: {
-      Pearl: [
-        {
-          url: asset("images.jpg"),
-          description: "Classic pearl earrings with timeless appeal",
-          weight: "6g",
-        },
-      ],
-      Gold: [
-        {
-          url: asset("download.jpg"),
-          description: "Solid gold earrings with modern design",
-          weight: "14g",
-        },
-      ],
-      Diamond: [
-        {
-          url: asset("download (1).jpg"),
-          description: "Diamond stud earrings for elegance",
-          weight: "5g",
-        },
-      ],
-    },
-    Bracelets: {
-      Silver: [
-        {
-          url: asset("images.jpg"),
-          description: "Sterling silver bracelet with sleek finish",
-          weight: "16g",
-        },
-      ],
-      Gold: [
-        {
-          url: asset("download (2).jpg"),
-          description: "Luxurious gold bracelet for special occasions",
-          weight: "28g",
-        },
-      ],
-      Beaded: [
-        {
-          url: asset("download.jpg"),
-          description: "Colorful beaded bracelet with unique patterns",
-          weight: "11g",
-        },
-      ],
-    },
-    Pendant: {
-      Heart: [
-        {
-          url: asset("download (1).jpg"),
-          description: "Romantic heart pendant with delicate chain",
-          weight: "7g",
-        },
-      ],
-      Cross: [
-        {
-          url: asset("download (2).jpg"),
-          description: "Elegant cross pendant with spiritual meaning",
-          weight: "13g",
-        },
-      ],
-      Star: [
-        {
-          url: asset("download (3).jpg"),
-          description: "Shining star pendant for celestial beauty",
-          weight: "9g",
-        },
-      ],
-    },
-    "Man Collection": {
-      Chain: [
-        {
-          url: asset("images.jpg"),
-          description: "Stylish men's chain with rugged design",
-          weight: "35g",
-        },
-      ],
-      Bracelet: [
-        {
-          url: asset("download.jpg"),
-          description: "Masculine bracelet with bold links",
-          weight: "24g",
-        },
-      ],
-      Ring: [
-        {
-          url: asset("download (1).jpg"),
-          description: "Men's ring with sophisticated engraving",
-          weight: "17g",
-        },
-      ],
-    },
-    SET: {
-      Gold: [
-        {
-          url: asset("download (3).jpg"),
-          description: "Complete gold jewelry set for elegance",
-          weight: "45g",
-        },
-      ],
-      Diamond: [
-        {
-          url: asset("images.jpg"),
-          description: "Diamond jewelry set with sparkling gems",
-          weight: "32g",
-        },
-      ],
-      Silver: [
-        {
-          url: asset("download.jpg"),
-          description: "Silver jewelry set with versatile appeal",
-          weight: "38g",
-        },
-      ],
-    },
-    Mine: {
-      Diamond: [
-        {
-          url: asset("download (1).jpg"),
-          description: "Premium mined diamond with exceptional clarity",
-          weight: "4g",
-        },
-      ],
-      Ruby: [
-        {
-          url: asset("download (2).jpg"),
-          description: "Vivid ruby from natural mines",
-          weight: "6g",
-        },
-      ],
-    },
-  });
+  useEffect(() => {
+    fetchCategories();
+    fetchCartItemsCount(); // Fetch cart count on component mount
+  }, []);
 
-  const getCategoryCover = (category) => {
-    const group = categoryImages[category] || {};
-    const firstKey = Object.keys(group)[0];
-    const imgs = group[firstKey] || [];
-    return imgs[0]?.url || asset("download.jpg");
+  // Fetch products by category
+  const fetchProductsByCategory = async (categoryName) => {
+    setProductsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("category_name", categoryName)
+      .is("status",null)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching products:", error.message);
+        setProducts([]);
+      } else {
+        console.log("Fetched products successfully:", data);
+        setProducts(data);
+      }
+    } catch (error) {
+      console.error("Error in fetchProductsByCategory:", error);
+      setProducts([]);
+    }
+    setProductsLoading(false);
   };
 
-  // Category stats
-  const categoryStats = useMemo(() => {
-    const stats = { All: jewellery.length };
-    categories.slice(1).forEach((cat) => {
-      stats[cat] = jewellery.filter((item) => item.category === cat).length;
-    });
-    return stats;
-  }, [jewellery]);
-
-  // Filtered and searched jewellery
-  const filteredJewellery = useMemo(() => {
-    let filtered = jewellery;
-
+  // Fetch products when category changes
+  useEffect(() => {
     if (selectedCategory !== "All") {
-      filtered = filtered.filter((item) => item.category === selectedCategory);
-    }
-
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (item) =>
-          item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.category.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    return filtered;
-  }, [jewellery, selectedCategory, searchTerm]);
-
-  // Pagination
-  const paginatedItems = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredJewellery.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredJewellery, currentPage, itemsPerPage]);
-
-  const totalPages = Math.ceil(filteredJewellery.length / itemsPerPage);
-
-  const addToCart = (item, quantity) => {
-    const existingItem = cart.find((cartItem) => cartItem.id === item.id);
-    if (existingItem) {
-      setCart(
-        cart.map((cartItem) =>
-          cartItem.id === item.id
-            ? { ...cartItem, quantity: cartItem.quantity + quantity }
-            : cartItem
-        )
-      );
-      setToast({
-        message: `Updated ${item.name} quantity in cart!`,
-        type: "success",
-        duration: 3000,
-      });
+      fetchProductsByCategory(selectedCategory);
     } else {
-      setCart([...cart, { ...item, quantity }]);
+      setProducts([]);
+    }
+  }, [selectedCategory]);
+
+  // Update cart count when cart modal opens/closes
+  useEffect(() => {
+    if (showCartModal) {
+      fetchCartItemsCount();
+    }
+  }, [showCartModal]);
+
+const handleAddToCartClick = async (item) => {
+  try {
+    // Check if item is already in cart in Supabase
+    const userData = localStorage.getItem('users');
+    if (!userData) {
       setToast({
-        message: `Added ${item.name} to cart!`,
-        type: "success",
+        message: 'Please login to add items to cart',
+        type: "error",
         duration: 3000,
       });
+      return;
     }
-  };
 
-  const clearCart = () => {
-    setCart([]);
+    const user = JSON.parse(userData);
+    const userId = user.id;
+
+    // Check if product is already in cart
+    const { data: existingCartItems, error } = await supabase
+      .from('cart_item')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('product_id', item.id);
+
+    if (error) {
+      console.error('Error checking cart:', error);
+      setToast({
+        message: 'Error checking cart',
+        type: "error",
+        duration: 3000,
+      });
+      return;
+    }
+
+    // If item already exists in cart
+    if (existingCartItems && existingCartItems.length > 0) {
+      setToast({
+        message: `${item.name || item.product_name} is already in your cart!`,
+        type: "warning",
+        duration: 3000,
+      });
+      return;
+    }
+
+    // If item is not in cart, add it
+    const { data, error: insertError } = await supabase
+      .from('cart_item')
+      .insert([{ 
+        user_id: userId, 
+        product_id: item.id, 
+        category_name: item.category_name, 
+        quantity: '1'
+      }])
+      .select();
+
+    if (insertError) {
+      console.error('Error adding to cart:', insertError);
+      setToast({
+        message: 'Failed to add item to cart',
+        type: "error",
+        duration: 3000,
+      });
+      return;
+    }
+
+    // Update visual state
+   setClickedItems((prev) => new Set(prev).add(item.id));
     setToast({
-      message: "Cart cleared successfully!",
+      message: `Added ${item.name || item.product_name} to cart!`,
       type: "success",
       duration: 3000,
     });
-  };
 
-  const toggleWishlist = (itemId) => {
-    setWishlist((prev) =>
-      prev.includes(itemId)
-        ? prev.filter((id) => id !== itemId)
-        : [...prev, itemId]
-    );
-  };
+    // Refresh cart count after adding
+    setTimeout(() => fetchCartItemsCount(), 500);
 
-  const getCartTotalWeight = () =>
-    cart
-      .reduce((total, item) => {
-        if (!item.weight) return total;
-        const weightNum = parseFloat(String(item.weight).replace("g", "")) || 0;
-        return total + weightNum * item.quantity;
-      }, 0)
-      .toFixed(1);
+  } catch (error) {
+    console.error('Error in handleAddToCartClick:', error);
+    setToast({
+      message: 'Failed to add item to cart',
+      type: "error",
+      duration: 3000,
+    });
+  }
+};
 
-  const getCartTotal = () =>
-    cart.reduce((total, item) => total + item.price * item.quantity, 0);
-  const getCartItemCount = () =>
-    cart.reduce((total, item) => total + item.quantity, 0);
 
-  const confirmOrder = async () => {
-    console.log("Confirming order, cart:", cart);
+// Add this function in UserDashboard.jsx
+const syncCartItems = async () => {
+  try {
+    const userData = localStorage.getItem('users');
+    if (!userData) return;
 
-    // Removed PDF generation as per user request
-    // const doc = new jsPDF();
-    // // Header
-    // doc.setFontSize(20);
-    // doc.text('AT Jeweller - Order Confirmation', 20, 30);
-    // // Order details
-    // doc.setFontSize(12);
-    // doc.text(`Order Date: ${new Date().toLocaleDateString()}`, 20, 50);
-    // doc.text(`Customer: ${user?.name || "Guest User"}`, 20, 60);
-    // doc.text(`Order ID: ${Date.now()}`, 20, 70);
-    // // Items
-    // doc.text('Items:', 20, 90);
-    // let yPosition = 100;
-    // cart.forEach((item, index) => {
-    //   doc.text(`${index + 1}. ${item.name} (${item.category})`, 20, yPosition);
-    //   doc.text(`   Quantity: ${item.quantity}`, 20, yPosition + 10);
-    //   doc.text(`   Weight: ${item.weight || "N/A"}`, 20, yPosition + 20);
-    //   yPosition += 30;
-    // });
-    // // Total
-    // doc.text(`Total Items: ${getCartItemCount()}`, 20, yPosition + 10);
-    // doc.text(`Total Weight: ${getCartTotalWeight()}g`, 20, yPosition + 20);
-    // // Save the PDF
-    // doc.save(`order-${Date.now()}.pdf`);
+    const user = JSON.parse(userData);
+    const userId = user.id;
+    if (!userId) return;
 
-    // Store booking data for admin to see (if available)
-    if (addBooking) {
-      cart.forEach((item) => {
+    const { data, error } = await supabase
+      .from('cart_item')
+      .select('product_id')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error syncing cart items:', error);
+      return;
+    }
+
+    // Update clickedItems state based on cart items
+    const cartProductIds = new Set(data?.map(item => item.product_id) || []);
+    setClickedItems(cartProductIds);
+
+  } catch (error) {
+    console.error('Error in syncCartItems:', error);
+  }
+};
+
+useEffect(() => {
+  syncCartItems();
+}, []);
+
+const confirmOrder = async () => {
+  try {
+    const userData = localStorage.getItem('users'); // Fixed: 'user' not 'users'
+    if (!userData) return;
+
+    const user = JSON.parse(userData);
+    const userId = user.id;
+
+    // Fetch cart items with product details
+    const { data: cartItems, error } = await supabase
+      .from('cart_item')
+      .select('*, products(*)')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error fetching cart items for order:', error);
+      return;
+    }
+
+    if (!cartItems || cartItems.length === 0) {
+      setToast({
+        message: 'Your cart is empty!',
+        type: "warning",
+        duration: 3000,
+      });
+      return;
+    }
+
+    console.log("Confirming order, cart items:", cartItems);
+
+    // Extract product IDs from cart items to update their status
+    const productIds = cartItems.map(item => item.product_id).filter(id => id);
+
+    // Update product status to "booked" for all products in the cart
+    if (productIds.length > 0) {
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({ 
+          status: 'booked',
+          booking_date: new Date().toISOString().split('T')[0] // Add booking date
+        })
+        .in('id', productIds);
+
+      if (updateError) {
+        console.error('Error updating product status:', updateError);
+        setToast({
+          message: 'Order placed but failed to update product status',
+          type: "warning",
+          duration: 3000,
+        });
+      } else {
+        console.log('Product status updated to booked for IDs:', productIds);
+      }
+    }
+
+    // Prepare items data for orders table (store all item details as JSON)
+    const itemsData = cartItems.map(item => ({
+      id: item.id,
+      product_id: item.product_id,
+      product_name: item.products?.product_name || 'Unknown Product',
+      category_name: item.category_name || item.products?.category_name,
+      quantity: item.quantity,
+      weight: item.products?.weight || '',
+      price: item.products?.price || 0,
+      product_image_url: item.products?.product_image_url || '',
+     
+      created_at: item.created_at
+    }));
+
+    // Calculate total items count
+    const totalItems = cartItems.reduce((total, item) => total + (parseInt(item.quantity) || 1), 0);
+
+    // Create order in orders table
+    const { data: orderData, error: orderError } = await supabase
+      .from('orders')
+      .insert([{
+        user_id: userId,
+        total_item: totalItems,
+        items: itemsData, // Store all items as JSON array
+        created_at: new Date().toISOString()
+      }])
+      .select();
+
+    if (orderError) {
+      console.error('Error creating order:', orderError);
+      setToast({
+        message: 'Failed to create order',
+        type: "error",
+        duration: 3000,
+      });
+      return;
+    }
+
+    console.log("Order created successfully:", orderData);
+
+    // Store booking data for admin to see (if needed)
+    if (addBooking && cartItems) {
+      cartItems.forEach((item) => {
         addBooking({
           userName: user?.name || "Guest User",
-          category: item.category,
-          jewelleryName: item.name,
+          category: item.category_name || item.products?.category_name,
+          jewelleryName: item.products?.product_name || item.product_name,
           quantity: item.quantity,
-          weight: item.weight || "",
+          weight: item.products?.weight || item.weight || "",
           userId: user?.id || "guest",
-          image: item.image, // include primary image
-          images: item.images ? item.images : [item.image].filter(Boolean),
+          image: item.products?.product_image_url || item.product_image_url,
+          images: item.products?.product_image_url ? [item.products.product_image_url] : [],
+        
         });
       });
     }
 
-    // Add to user's orders
-    const newBookings = await Promise.all(cart.map(async (item, index) => {
-      console.log("Item image:", item.image);
-      let imageUrl = item.image;
+    // Add to user's local orders state for immediate UI update
+    const newBookings = await Promise.all(cartItems.map(async (item, index) => {
+      let imageUrl = item.products?.product_image_url || item.product_image_url;
       if (imageUrl && !imageUrl.startsWith("data:image/")) {
-        // Convert URL to data URL
         try {
           const response = await fetch(imageUrl);
           const blob = await response.blob();
@@ -554,7 +453,6 @@ const UserDashboard = () => {
             reader.readAsDataURL(blob);
           });
           imageUrl = dataUrl;
-          console.log("Converted image to data URL:", imageUrl);
         } catch (error) {
           console.error("Error converting image:", error);
           imageUrl = "https://via.placeholder.com/64x64?text=No+Image";
@@ -562,132 +460,65 @@ const UserDashboard = () => {
       }
       return {
         id: `${Date.now()}-${index}`,
-        jewelleryName: item.name,
-        category: item.category,
+        jewelleryName: item.products?.product_name || item.product_name,
+        category: item.category_name || item.products?.category_name,
         quantity: item.quantity,
-        weight: item.weight || "",
+        weight: item.products?.weight || item.weight || "",
         bookingDate: new Date().toISOString(),
-        status: "Confirmed",
-        image: imageUrl, // Ensure this is a data URL or fallback
+        status: "booked", // Use "booked" status
+        image: imageUrl,
+        order_id: orderData?.[0]?.id // Store the order ID from database
       };
     }));
 
     console.log("New bookings:", newBookings);
 
     setMyOrders((prev) => {
-      console.log("Previous bookings:", prev);
       const updated = [...prev, ...newBookings];
-      console.log("Updated bookings:", updated);
       return updated;
     });
 
-    // Clear cart
-    setCart([]);
+    // Clear cart in Supabase after order confirmation
+    const { error: clearError } = await supabase
+      .from('cart_item')
+      .delete()
+      .eq('user_id', userId);
+
+    if (clearError) {
+      console.error('Error clearing cart after order:', clearError);
+    } else {
+      setCartItemsCount(0); // Reset cart count
+      setClickedItems(new Set()); // Clear clicked items
+    }
 
     // Set order just placed flag for cart message
     setOrderJustPlaced(true);
 
     // Show success modal
     setShowOrderSuccessModal(true);
-  };
+
+    setToast({
+      message: 'Order placed successfully! Products marked as booked.',
+      type: "success",
+      duration: 3000,
+    });
+
+  } catch (error) {
+    console.error('Error in confirmOrder:', error);
+    setToast({
+      message: 'Failed to place order',
+      type: "error",
+      duration: 3000,
+    });
+  }
+};
 
   const handleCategoryChange = (category) => {
-    // Prevent scroll jumping when category changes
     const scrollPosition = window.pageYOffset;
     setSelectedCategory(category);
-    // Restore scroll position after state update
     setTimeout(() => {
       window.scrollTo(0, scrollPosition);
     }, 0);
-  };
-
-  const handleAddJewellery = (e) => {
-    e.preventDefault();
-    if (newJewellery.category && newJewellery.name && newJewellery.image) {
-      if (editingItem) {
-        // Update existing item
-        updateJewellery(editingItem.id, {
-          ...newJewellery,
-          price: parseFloat(newJewellery.price) || 0,
-        });
-        alert("Product updated successfully!");
-      } else {
-        // Add new item
-        addJewellery({
-          ...newJewellery,
-          price: parseFloat(newJewellery.price) || 0,
-        });
-        alert("Product added successfully!");
-      }
-
-      resetForm();
-    }
-  };
-
-  const handleDeleteConfirm = () => {
-    if (deleteConfirm) {
-      deleteJewellery(deleteConfirm.id);
-      setDeleteConfirm(null);
-      alert("Product deleted successfully!");
-    }
-  };
-
-  const resetForm = () => {
-    setNewJewellery({
-      category: "",
-      name: "",
-      description: "",
-      price: "",
-      image: "",
-      quantity: 1,
-      weight: "",
-    });
-    setImagePreview("");
-    setShowAddModal(false);
-    setEditingItem(null);
-  };
-
-  const handleEdit = (item) => {
-    setEditingItem(item);
-    setNewJewellery({
-      category: item.category,
-      name: item.name,
-      description: item.description,
-      price: item.price.toString(),
-      image: item.image,
-      quantity: item.quantity,
-      weight: item.weight || "",
-    });
-    setShowAddModal(true);
-  };
-
-  const handleLogout = () => {
-    logout();
-    // Navigate to home page - authentication logic will show login
-    window.location.href = "/";
-  };
-
-  const handleAddToCartClick = (item) => {
-    if (clickedItems.has(item.id)) {
-      // Double click - remove from cart and turn button yellow
-      setClickedItems((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(item.id);
-        return newSet;
-      });
-
-      // Remove item from cart
-      setCart(cart.filter((cartItem) => cartItem.id !== item.id));
-      setToast({
-        message: `Removed ${item.name} from cart!`,
-        type: "info",
-        duration: 3000,
-      });
-    } else {
-      // Single click - add to cart and turn green
-      addToCart(item, 1);
-      setClickedItems((prev) => new Set(prev).add(item.id));
-    }
   };
 
   const handleBackToCategories = () => {
@@ -695,6 +526,206 @@ const UserDashboard = () => {
     setSearchTerm("");
     setCurrentPage(1);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleLogout = () => {
+    logout();
+    window.location.href = "/";
+  };
+
+  const asset = (name) => {
+    if (!name) return name;
+    const base = import.meta.env.BASE_URL || "/";
+    const cleanBase = base.endsWith("/") ? base.slice(0, -1) : base;
+    const clean = name.startsWith("/") ? name.slice(1) : name;
+    return `${cleanBase}/${clean}`;
+  };
+
+  // CategoriesGallery Component (merged)
+  const CategoriesGallery = () => (
+    <div className="space-y-4">
+      <h2 className="mt-4 text-2xl font-bold text-gray-900">Categories</h2>
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {Array.isArray(categories) && categories.length > 0 ? (
+          categories.map((category) => {
+            const categoryName = category.name || category.category_name || category.title;
+            const imageUrl = category.image_url || category.image || category.cover_image || asset("download.jpg");
+            
+            return (
+              <div
+                key={category.id || categoryName}
+                onClick={() => {
+                  setSelectedCategory(categoryName);
+                  setCurrentPage(1);
+                }}
+                className="overflow-hidden relative z-10 rounded-2xl border border-gray-200 shadow-md transition-all duration-300 cursor-pointer group hover:shadow-xl hover:-translate-y-1"
+              >
+                <div className="relative">
+                  <img
+                    src={imageUrl}
+                    alt={categoryName}
+                    className="object-cover w-full h-56 transition-transform duration-500 sm:h-52 md:h-60 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t to-transparent from-black/60 via-black/10" />
+                  <div className="absolute right-0 bottom-0 left-0 p-4">
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <h3 className="text-lg font-bold text-white">
+                          {categoryName}
+                        </h3>
+                        <p className="text-xs text-white/80">
+                          Tap to view products
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="col-span-full py-8 text-center">
+            <p className="text-gray-500">
+              {loading ? "Loading categories..." : "No categories available"}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // TopBar Component (merged) - FIXED: using cartItemsCount instead of cart
+  const TopBar = () => (
+    <header className="fixed top-0 right-0 left-0 z-30 p-4 border-b border-gray-200 shadow-sm backdrop-blur bg-white/90 md:sticky md:top-0 lg:p-6">
+      <div className="flex relative gap-2 justify-center items-center">
+        <div className="absolute left-0">
+          {activeTab === "catalog" && selectedCategory !== "All" && (
+            <button
+              onClick={handleBackToCategories}
+              className="hidden items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 shadow-sm hover:bg-gray-50"
+            >
+              <ChevronLeft className="mr-1 w-4 h-4" />
+              Back to Categories
+            </button>
+          )}
+        </div>
+        <div className="text-base font-semibold text-gray-800">
+          AT Jeweller
+        </div>
+        <div className="absolute right-0">
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setShowCartModal(true)}
+              className="flex relative justify-center items-center w-10 h-10 text-gray-600 rounded-lg transition-colors hover:bg-gray-100 hover:text-gray-900 ios-touch-target"
+              title="Shopping Cart"
+            >
+              <ShoppingCart className="w-5 h-5" />
+              {cartItemsCount > 0 && (
+                <span className="flex absolute -top-1 -right-1 justify-center items-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">
+                  {cartItemsCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+
+  // OrderSuccessModal Component (merged)
+  const OrderSuccessModal = () => {
+    if (!showOrderSuccessModal) return null;
+
+    return (
+      <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black bg-opacity-50 ios-modal">
+        <div className="p-8 w-full max-w-md text-center bg-white rounded-2xl shadow-xl">
+          <div className="mb-6">
+            <div className="flex justify-center items-center mx-auto mb-4 w-20 h-20 bg-green-100 rounded-full">
+              <CheckCircle className="w-10 h-10 text-green-600" />
+            </div>
+            <h3 className="mb-2 text-2xl font-bold text-gray-900">Order Confirmed!</h3>
+            <p className="text-gray-600">
+              Your order has been successfully placed. You will receive a
+              confirmation email shortly.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                setShowOrderSuccessModal(false);
+                setActiveTab("bookings");
+              }}
+              className="px-6 py-3 w-full font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg transition-all hover:from-amber-600 hover:to-orange-600"
+            >
+              View My Orders
+            </button>
+            <button
+              onClick={() => {
+                setShowOrderSuccessModal(false);
+                setActiveTab("catalog");
+              }}
+              className="px-6 py-3 w-full font-medium text-gray-700 bg-gray-100 rounded-xl transition-colors hover:bg-gray-200"
+            >
+              Continue Shopping
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ToastNotification Component (merged)
+  const ToastNotification = () => {
+    if (!toast) return null;
+
+    return (
+      <div className="fixed right-4 bottom-4 left-4 z-50 sm:bottom-6 sm:left-auto sm:right-6 animate-slide-up">
+        <div
+          className={`flex items-center p-3 sm:p-4 rounded-xl shadow-lg border transition-all duration-300 ${
+            toast.type === "success"
+              ? "bg-green-50 border-green-200 text-green-800"
+              : "bg-red-50 border-red-200 text-red-800"
+          }`}
+        >
+          <div className="flex flex-1 items-center space-x-3">
+            {toast.type === "success" ? (
+              <CheckCircle className="flex-shrink-0 w-4 h-4 text-green-600 sm:w-5 sm:h-5" />
+            ) : (
+              <X className="flex-shrink-0 w-4 h-4 text-red-600 sm:w-5 sm:h-5" />
+            )}
+            <p className="flex-1 text-xs font-medium sm:text-sm sm:text-base">
+              {toast.message}
+            </p>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="flex-shrink-0 ml-2 text-gray-400 transition-colors sm:ml-4 hover:text-gray-600"
+          >
+            <X className="w-3 h-3 sm:w-4 sm:h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // BackToTopButton Component (merged)
+  const BackToTopButton = () => {
+    if (!showBackToTop || sidebarOpen) return null;
+
+    return (
+      <button
+        onClick={scrollToTop}
+        className="fixed right-6 bottom-24 z-40 p-3 text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-full shadow-lg transition-all duration-300 transform hover:shadow-xl hover:scale-110 active:scale-95 md:bottom-8 animate-fade-in-up"
+        title="Back to Top"
+      >
+        <ArrowUp className="w-5 h-5" />
+      </button>
+    );
   };
 
   return (
@@ -727,194 +758,31 @@ const UserDashboard = () => {
           animation: fadeInUp 0.3s ease-out;
         }
       `}</style>
-      {/* Mobile Menu Button */}
-      {!sidebarOpen && (
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="fixed top-0 left-1 z-50 p-2 bg-white rounded-lg shadow-lg lg:hidden"
-        >
-          <Menu className="w-6 h-6" />
-        </button>
-      )}
-
-      {/* Mobile Overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-[60] bg-black bg-opacity-50 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
 
       {/* Sidebar */}
-      <div
-        className={`flex fixed top-0 left-0 z-[70] bg-white flex-col justify-between w-full sm:w-[85vw] sm:max-w-xs border-r border-gray-200 shadow-xl lg:z-40 lg:shadow-none lg:w-72 lg:max-w-none lg:translate-x-0 lg:flex-shrink-0 overflow-y-auto overflow-x-hidden scrollbar-hide transform transition-transform duration-300 ease-in-out ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-        style={{
-          height: "100dvh", // Use dynamic viewport height for mobile browsers
-          paddingBottom: "max(env(safe-area-inset-bottom, 0px) + 2rem, 5rem)", // Better safe area handling
-        }}
-      >
-        {/* Sidebar Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">AT Jeweller</h1>
-              <p className="text-sm text-gray-500">Dashboard</p>
-            </div>
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-lg transition-colors hover:bg-gray-100 lg:hidden ios-touch-target"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
-          {[
-            { id: "catalog", label: "Catalogue", icon: Package },
-            { id: "bookings", label: "Orders", icon: History },
-          ].map((tab) => (
-            <div key={tab.id} className="relative">
-              {/* Active indicator bar */}
-              {activeTab === tab.id && (
-                <div className="absolute top-0 bottom-0 left-0 w-1 bg-gradient-to-b from-amber-500 to-orange-500 rounded-r-full"></div>
-              )}
-              <button
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  if (tab.id === "catalog") {
-                    setSelectedCategory("All");
-                    setSearchTerm("");
-                    setCurrentPage(1);
-                  }
-                  if (isMobile) setSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-start gap-3 px-4 py-3 rounded-xl font-medium transition-colors overflow-hidden min-w-0
-                    ${
-                      activeTab === tab.id
-                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
-                        : "text-gray-700 hover:bg-gray-100"
-                    }`}
-                title={tab.label}
-              >
-                <tab.icon className="flex-shrink-0 w-5 h-5" />
-                <span className="truncate whitespace-nowrap">{tab.label}</span>
-              </button>
-            </div>
-          ))}
-        </nav>
-
-        {/* Logout - positioned higher on mobile */}
-        <div className="bottom-0 p-4 border-t border-gray-200 lg:border-t ios-touch-target">
-          <button
-            onClick={handleLogout}
-            className="flex justify-center items-center px-4 py-3 space-x-2 w-full text-white bg-gray-600 rounded-xl transition-colors hover:bg-gray-700 ios-touch-target prevent-zoom"
-            title="Logout"
-          >
-            <LogOut className="w-5 h-5" />
-            <span>Logout</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Sidebar Toggle Button (when sidebar is hidden) */}
-      {!sidebarOpen && (
-        <div className="hidden flex-col items-center py-4 w-16 bg-white border-r border-gray-200 shadow-xl lg:flex lg:w-72 lg:max-w-none lg:translate-x-0 lg:flex-shrink-0">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 mb-4 rounded-lg transition-colors hover:bg-gray-100 ios-touch-target"
-            title="Show Sidebar"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-
-          {/* Navigation Icons Only */}
-          <nav className="flex-1 space-y-2">
-            {[
-              { id: "catalog", label: "Catalogue", icon: Package },
-              { id: "bookings", label: "Orders", icon: History },
-            ].map((tab) => (
-              <div key={tab.id} className="relative">
-                {/* Active indicator bar */}
-                {activeTab === tab.id && (
-                  <div className="absolute top-0 bottom-0 left-0 w-1 bg-gradient-to-b from-amber-500 to-orange-500 rounded-r-full"></div>
-                )}
-                <button
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`w-12 h-12 flex items-center justify-center rounded-xl font-medium transition-all
-                    ${
-                      activeTab === tab.id
-                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
-                        : "text-gray-700 hover:bg-gray-100"
-                    }`}
-                  title={tab.label}
-                >
-                  <tab.icon className="w-5 h-5" />
-                </button>
-              </div>
-            ))}
-          </nav>
-
-          {/* Logout Icon */}
-          <div className="mt-auto">
-            <button
-              onClick={handleLogout}
-              className="flex justify-center items-center w-12 h-12 text-gray-600 rounded-xl transition-colors hover:text-gray-800 hover:bg-gray-100"
-              title="Logout"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      )}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
+        isMobile={isMobile}
+        handleLogout={handleLogout}
+        setSelectedCategory={setSelectedCategory}
+        setSearchTerm={setSearchTerm}
+        setCurrentPage={setCurrentPage}
+      />
 
       {/* Main Content */}
       <div
         className="flex flex-col flex-1 lg:ml-72 ios-footer-fix"
         style={{
           scrollBehavior: "auto",
-          minHeight: "100dvh", // Use dynamic viewport height
-          paddingBottom: "5rem", // Account for footer height
+          minHeight: "100dvh",
+          paddingBottom: "5rem",
         }}
       >
         {/* Top Bar */}
-        <header className="fixed top-0 right-0 left-0 z-30 p-4 border-b border-gray-200 shadow-sm backdrop-blur bg-white/90 md:sticky md:top-0 lg:p-6">
-          <div className="flex relative gap-2 justify-center items-center">
-            <div className="absolute left-0">
-              {activeTab === "catalog" && selectedCategory !== "All" && (
-                <button
-                  onClick={handleBackToCategories}
-                  className="hidden items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 shadow-sm hover:bg-gray-50"
-                >
-                  <ChevronLeft className="mr-1 w-4 h-4" />
-                  Back to Categories
-                </button>
-              )}
-            </div>
-            <div className="text-base font-semibold text-gray-800">
-              AT Jeweller
-            </div>
-            <div className="absolute right-0">
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => setShowCartModal(true)}
-                  className="flex relative justify-center items-center w-10 h-10 text-gray-600 rounded-lg transition-colors hover:bg-gray-100 hover:text-gray-900 ios-touch-target"
-                  title="Shopping Cart"
-                >
-                  <ShoppingCart className="w-5 h-5" />
-                  {cart.length > 0 && (
-                    <span className="flex absolute -top-1 -right-1 justify-center items-center w-5 h-5 text-xs font-bold text-white bg-red-500 rounded-full">
-                      {cart.length}
-                    </span>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </header>
+        <TopBar />
 
         {/* Content Area */}
         <main
@@ -927,1278 +795,60 @@ const UserDashboard = () => {
             <div className="space-y-6">
               {/* Categories Gallery (when All is selected) */}
               {selectedCategory === "All" && !searchTerm && (
-                <div className="space-y-4">
-                  <h2 className="mt-4 text-2xl font-bold text-gray-900">
-                    Categories
-                  </h2>
-                  <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {categories.slice(1).map((category) => (
-                      <div
-                        key={category}
-                        onClick={() => {
-                          setSelectedCategory(category);
-                          setCurrentPage(1);
-                        }}
-                        className="overflow-hidden relative z-10 rounded-2xl border border-gray-200 shadow-md transition-all duration-300 cursor-pointer group hover:shadow-xl hover:-translate-y-1"
-                      >
-                        <div className="relative">
-                          <img
-                            src={getCategoryCover(category)}
-                            alt={category}
-                            className="object-cover w-full h-56 transition-transform duration-500 sm:h-52 md:h-60 group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t to-transparent from-black/60 via-black/10" />
-                          <div className="absolute right-0 bottom-0 left-0 p-4">
-                            <div className="flex justify-between items-end">
-                              <div>
-                                <h3 className="text-lg font-bold text-white">
-                                  {category}
-                                </h3>
-                                <p className="text-xs text-white/80">
-                                  Tap to view collection
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <CategoriesGallery />
               )}
 
-              {/* Stats (only when searching across all items) */}
-              {selectedCategory === "All" && !!searchTerm && (
-                <div className="flex justify-between items-center">
-                  <div className="text-sm text-gray-600">
-                    Showing {paginatedItems.length} of{" "}
-                    {filteredJewellery.length} items
-                  </div>
-                </div>
-              )}
-
-              {/* Category view when a specific category is selected - showing all photos */}
+              {/* Category Products */}
               {selectedCategory !== "All" && (
-                <div className="space-y-6">
-                  {/* Filter and Sort Controls - Fixed for mobile, sticky for desktop */}
-                  <div
-                    className={`fixed right-0 left-0 top-12 z-40 p-3 border-b border-gray-200 shadow-md backdrop-blur-sm bg-white/95 md:sticky md:top-4 md:p-6 md:rounded-2xl md:border-2 md:shadow-xl md:bg-white md:border-amber-200 md:mb-8 ${
-                      sidebarOpen && isMobile ? "hidden" : ""
-                    }`}
-                  >
-                    <div className="flex flex-wrap gap-2 justify-between items-center md:gap-4">
-                      <div className="flex flex-wrap gap-2 items-center md:gap-3">
-                        <button
-                          onClick={() => setSelectedCategory("All")}
-                          className="flex items-center px-2 md:px-3 py-1.5 md:py-2 space-x-1 md:space-x-2 text-xs md:text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 shadow-sm hover:bg-gray-50"
-                        >
-                          <ChevronLeft className="w-3 h-3 md:w-4 md:h-4" />
-                          <span className="hidden sm:inline">Catalog</span>
-                          <span className="sm:hidden">Back</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (showFilters) {
-                              // If filters are open, clear them and close
-                              setMinWeight("");
-                              setMaxWeight("");
-                              setShowFilters(false);
-                            } else {
-                              // If filters are closed, open them
-                              setShowFilters(true);
-                            }
-                          }}
-                          className={`flex items-center px-3 md:px-4 py-2 md:py-3 space-x-2 md:space-x-3 text-sm md:text-base font-semibold rounded-xl border-2 shadow-lg transition-all ${
-                            showFilters
-                              ? "text-white bg-gradient-to-r from-amber-500 to-orange-500 border-amber-500"
-                              : "text-gray-700 bg-white border-gray-300 hover:bg-amber-50 hover:border-amber-300"
-                          }`}
-                        >
-                          <Filter className="w-3 h-3 md:w-4 md:h-4" />
-                          <span className="hidden sm:inline">Filters</span>
-                          <span className="sm:hidden">Filter</span>
-                        </button>
-
-                        {/* Sort Dropdown */}
-                        <div className="relative">
-                          <select
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value)}
-                            className="block px-2 md:px-3 py-1.5 md:py-2 pr-6 md:pr-8 w-full text-xs md:text-sm text-gray-700 bg-white rounded-lg border border-gray-300 shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                          >
-                            <option value="weight">Weight: Low to High</option>
-                            <option value="weight-desc">
-                              Weight: High to Low
-                            </option>
-                          </select>
-                          <div className="flex absolute inset-y-0 right-0 items-center px-1 pointer-events-none md:px-2">
-                            <ChevronDown className="w-3 h-3 text-gray-500 md:w-4 md:h-4" />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-1 md:space-x-3">
-                        {/* View mode controls removed - only grid view available */}
-                      </div>
-                    </div>
-
-                    {/* Expanded Filters */}
-                    {showFilters && (
-                      <div className="p-4 mt-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border-2 border-amber-200 md:mt-6 md:p-6 animate-fade-in">
-                        <h3 className="mb-2 text-xs font-semibold text-gray-700 md:mb-3 md:text-sm">
-                          Filter by Weight (grams)
-                        </h3>
-                        <div className="flex gap-2 items-center md:gap-4">
-                          <div className="flex-1">
-                            <label className="block mb-1 text-xs text-gray-600">
-                              Min Weight
-                            </label>
-                            <input
-                              type="number"
-                              value={minWeight}
-                              onChange={(e) => setMinWeight(e.target.value)}
-                              placeholder="Min"
-                              className="block px-2 md:px-3 py-1.5 md:py-2 w-full text-xs md:text-sm text-gray-700 bg-white rounded-lg border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <label className="block mb-1 text-xs text-gray-600">
-                              Max Weight
-                            </label>
-                            <input
-                              type="number"
-                              value={maxWeight}
-                              onChange={(e) => setMaxWeight(e.target.value)}
-                              placeholder="Max"
-                              className="block px-2 md:px-3 py-1.5 md:py-2 w-full text-xs md:text-sm text-gray-700 bg-white rounded-lg border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Mobile Spacer - pushes content down when filters are expanded */}
-                  {showFilters && <div className="block h-40 md:hidden"></div>}
-
-                  {/* Items Grid */}
-                  <div
-                    className={`grid grid-cols-1 gap-4 transition-all duration-300 sm:gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4`}
-                  >
-                    {Object.entries(
-                      categoryImages[selectedCategory] || {}
-                    ).flatMap(([subcategory, images]) =>
-                      images
-                        .filter((image) => {
-                          const weightStr =
-                            typeof image === "string" ? "" : image.weight || "";
-                          const weightNum =
-                            parseFloat(weightStr.replace("g", "")) || 0;
-                          const min = minWeight ? parseFloat(minWeight) : 0;
-                          const max = maxWeight
-                            ? parseFloat(maxWeight)
-                            : Infinity;
-                          return weightNum >= min && weightNum <= max;
-                        })
-                        .sort((a, b) => {
-                          const aWeight =
-                            typeof a === "string" ? "" : a.weight || "";
-                          const bWeight =
-                            typeof b === "string" ? "" : b.weight || "";
-                          const aNum =
-                            parseFloat(aWeight.replace("g", "")) || 0;
-                          const bNum =
-                            parseFloat(bWeight.replace("g", "")) || 0;
-
-                          const aName =
-                            typeof a === "string"
-                              ? a
-                              : `${selectedCategory} ${subcategory}`;
-                          const bName =
-                            typeof b === "string"
-                              ? b
-                              : `${selectedCategory} ${subcategory}`;
-
-                          switch (sortBy) {
-                            case "weight-desc":
-                              return bNum - aNum;
-                            case "name":
-                              return aName.localeCompare(bName);
-                            case "name-desc":
-                              return bName.localeCompare(aName);
-                            case "weight":
-                            default:
-                              return aNum - bNum;
-                          }
-                        })
-                        .map((image, index) => {
-                          const imageUrl =
-                            typeof image === "string" ? image : image.url;
-                          const imageDesc =
-                            typeof image === "string"
-                              ? `${selectedCategory} ${subcategory}`
-                              : image.description ||
-                                `${selectedCategory} ${subcategory}`;
-                          const imageWeight =
-                            typeof image === "string" ? "" : image.weight || "";
-                          const itemId = `${selectedCategory}-${subcategory}-${index}`;
-
-                          return (
-                            <div
-                              key={itemId}
-                              className="overflow-hidden relative rounded-xl border border-gray-200 shadow-md transition-all duration-300 group hover:shadow-xl hover:-translate-y-1"
-                            >
-                              <div className="overflow-hidden relative aspect-square">
-                                <img
-                                  src={imageUrl}
-                                  alt={imageDesc}
-                                  className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-105"
-                                />
-                              </div>
-
-                              <div className="absolute inset-0 bg-gradient-to-t to-transparent from-black/60 via-black/10">
-                                <div className="absolute right-0 bottom-0 left-0 p-4">
-                                  <div>{/* Subcategory name removed */}</div>
-                                  <div className="flex justify-end">
-                                    <button
-                                      onClick={() => {
-                                        const item = {
-                                          id: itemId,
-                                          category: selectedCategory,
-                                          subcategory: subcategory,
-                                          name: `${selectedCategory} ${subcategory}`,
-                                          description: imageDesc,
-                                          image: imageUrl,
-                                          weight: imageWeight,
-                                        };
-                                        handleAddToCartClick(item);
-                                      }}
-                                      className={`p-2 text-white rounded-full border shadow-lg opacity-100 transition-all duration-300 hover:scale-110 active:scale-95 hover:shadow-xl border-white/20 ${
-                                        clickedItems.has(itemId)
-                                          ? "bg-gradient-to-r from-green-500 to-green-600"
-                                          : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
-                                      }`}
-                                    >
-                                      <ShoppingCart className="w-5 h-5" />
-                                    </button>
-                                  </div>
-                                </div>
-                                {selectedCategory !== "All" && imageWeight && (
-                                  <div className="absolute bottom-2 left-1/2 z-20 transform -translate-x-1/2 sm:bottom-4">
-                                    <div className="px-2 py-1 rounded-full backdrop-blur-sm bg-black/60 sm:bg-black/50 sm:px-3 sm:py-1">
-                                      <span className="text-xs font-semibold text-white sm:text-sm">
-                                        {parseFloat(
-                                          String(imageWeight).replace("g", "")
-                                        ).toFixed(2)}{" "}
-                                        g
-                                      </span>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })
-                    )}
-                  </div>
-                </div>
+                <CategoryProducts
+                  selectedCategory={selectedCategory}
+                  setSelectedCategory={setSelectedCategory}
+                  products={products}
+                  productsLoading={productsLoading}
+                  showFilters={showFilters}
+                  setShowFilters={setShowFilters}
+                  minWeight={minWeight}
+                  setMinWeight={setMinWeight}
+                  maxWeight={maxWeight}
+                  setMaxWeight={setMaxWeight}
+                  sortBy={sortBy}
+                  setSortBy={setSortBy}
+                  clickedItems={clickedItems}
+                  handleAddToCartClick={handleAddToCartClick}
+                />
               )}
-              {/* Items Grid/List only for search results across all */}
-              {selectedCategory === "All" &&
-                !!searchTerm &&
-                (paginatedItems.length > 0 ? (
-                  <>
-                    <div
-                      className={`grid grid-cols-1 gap-8 transition-all duration-300 ease-in-out sm:gap-10 animate-fade-in sm:grid-cols-2 lg:grid-cols-2`}
-                    >
-                      {paginatedItems.map((item) => (
-                        <div
-                          key={item.id}
-                          className="overflow-hidden relative bg-white rounded-2xl border border-gray-200 shadow-sm transition-all duration-300 hover:shadow-lg hover:border-amber-200 hover-lift"
-                        >
-                          <div className="overflow-hidden aspect-square">
-                            <img
-                              src={item.image}
-                              alt={item.name}
-                              className="object-cover w-full h-full transition-transform duration-300 hover:scale-105"
-                            />
-                          </div>
-
-                          <div className="flex-1 p-4">
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                {/* Item name removed */}
-                                <p className="text-sm font-medium tracking-wide text-gray-500 uppercase">
-                                  {item.category}
-                                </p>
-                              </div>
-                            </div>
-
-                            <p className="mb-4 text-sm leading-relaxed text-gray-600">
-                              {item.description}
-                            </p>
-
-                            <div className="flex items-center space-x-3">
-                              <span className="text-sm text-gray-600">
-                                Qty: 1
-                              </span>
-                              <button
-                                onClick={() => handleAddToCartClick(item)}
-                                className={`px-6 py-3 font-semibold text-white rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 hover:shadow-xl ${
-                                  clickedItems.has(item.id)
-                                    ? "bg-gradient-to-r from-green-500 to-green-600"
-                                    : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
-                                }`}
-                              >
-                                Add to Cart
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Weight at bottom center for search results items */}
-                          {item.weight && (
-                            <div className="absolute bottom-2 left-1/2 z-20 transform -translate-x-1/2 sm:bottom-4">
-                              <div className="px-2 py-1 rounded-full backdrop-blur-sm bg-black/60 sm:bg-black/50 sm:px-3 sm:py-1">
-                                <span className="text-xs font-semibold text-white sm:text-sm">
-                                  {parseFloat(
-                                    String(item.weight).replace("g", "")
-                                  ).toFixed(2)}{" "}
-                                  g
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Pagination */}
-                    {totalPages > 1 && (
-                      <div className="flex justify-center items-center mt-8 space-x-2">
-                        {/* First Button */}
-                        <button
-                          onClick={() => setCurrentPage(1)}
-                          disabled={currentPage === 1}
-                          className="px-3 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 transition-colors hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="First Page"
-                        >
-                          First
-                        </button>
-
-                        {/* Previous Button */}
-                        <button
-                          onClick={() =>
-                            setCurrentPage((prev) => Math.max(1, prev - 1))
-                          }
-                          disabled={currentPage === 1}
-                          className="px-3 py-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-
-                        {/* Page Numbers */}
-                        {[...Array(totalPages)].map((_, i) => (
-                          <button
-                            key={i + 1}
-                            onClick={() => setCurrentPage(i + 1)}
-                            className={`px-4 py-2 rounded-lg ${
-                              currentPage === i + 1
-                                ? "bg-amber-500 text-white"
-                                : "border border-gray-300 hover:bg-gray-50"
-                            }`}
-                          >
-                            {i + 1}
-                          </button>
-                        ))}
-
-                        {/* Next Button */}
-                        <button
-                          onClick={() =>
-                            setCurrentPage((prev) =>
-                              Math.min(totalPages, prev + 1)
-                            )
-                          }
-                          disabled={currentPage === totalPages}
-                          className="px-3 py-2 rounded-lg border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-
-                        {/* Last Button */}
-                        <button
-                          onClick={() => setCurrentPage(totalPages)}
-                          disabled={currentPage === totalPages}
-                          className="px-3 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 transition-colors hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Last Page"
-                        >
-                          Last
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="py-16 text-center">
-                    <Package className="mx-auto mb-4 w-16 h-16 text-gray-300" />
-                    <h3 className="mb-2 text-lg font-medium text-gray-900">
-                      No items found
-                    </h3>
-                    <p className="text-gray-500">
-                      {searchTerm
-                        ? `No items match "${searchTerm}"`
-                        : "No jewellery items added yet"}
-                    </p>
-                  </div>
-                ))}
             </div>
           )}
 
           {/* My Orders Tab */}
           {activeTab === "bookings" && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Order History
-                </h2>
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <Calendar className="w-4 h-4" />
-                  <span>{myOrders.length} total orders</span>
-                </div>
-              </div>
-
-              {myOrders.length > 0 ? (
-                <div className="space-y-4">
-                  {myOrders.map((booking, index) => (
-                    <div
-                      key={booking.id}
-                      className="p-6 bg-white rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-lg"
-                    >
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="flex items-center space-x-3">
-                          <img
-                            src={booking.image}
-                            alt={booking.jewelleryName}
-                            className="object-cover w-16 h-16 rounded-xl"
-                          />
-                          <div>
-                            <h3 className="font-semibold text-gray-900">
-                              {booking.jewelleryName}
-                            </h3>
-                            <p className="text-sm text-gray-600">
-                              {booking.category}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span
-                            className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${
-                              booking.status === "Confirmed"
-                                ? "bg-green-100 text-green-800"
-                                : booking.status === "Processing"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : "bg-gray-100 text-gray-800"
-                            }`}
-                          >
-                            {booking.status || "Confirmed"}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-                        <div>
-                          <p className="text-gray-500">Quantity</p>
-                          <p className="font-medium text-gray-900">
-                            {booking.quantity}
-                          </p>
-                        </div>
-                        {booking.weight && (
-                          <div>
-                            <p className="text-gray-500">Weight</p>
-                            <p className="font-medium text-gray-900">
-                              {booking.weight}
-                            </p>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-gray-500">Order Date</p>
-                          <p className="font-medium text-gray-900">
-                            {new Date(booking.bookingDate).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Status</p>
-                          <p className="font-medium text-gray-900">
-                            {booking.status || "Confirmed"}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Order Progress */}
-                      <div className="pt-4 mt-4 border-t border-gray-200">
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center space-x-2">
-                            <svg
-                              className="w-4 h-4 text-amber-500"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-                              />
-                            </svg>
-                            <span className="text-xs text-gray-500">
-                              Total Weight:{" "}
-                              {(() => {
-                                const w = booking.weight;
-                                if (!w) return "N/A";
-                                const ws = String(w).trim();
-                                const weightNum =
-                                  parseFloat(ws.replace("g", "")) || 0;
-                                const totalWeight =
-                                  weightNum * booking.quantity;
-                                return `${totalWeight.toFixed(1)}g`;
-                              })()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-16 text-center bg-white rounded-2xl border border-gray-200">
-                  <History className="mx-auto mb-4 w-16 h-16 text-gray-300" />
-                  <h3 className="mb-2 text-xl font-medium text-gray-900">
-                    No orders yet
-                  </h3>
-                  <p className="mb-6 text-gray-600">
-                    Your order history will appear here
-                  </p>
-                  <div className="flex justify-center">
-                    <button
-                      onClick={() => setActiveTab("catalog")}
-                      className="flex items-center px-6 py-3 space-x-2 font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg transition-all hover:from-amber-600 hover:to-orange-600"
-                    >
-                      <Package className="w-4 h-4" />
-                      <span>Start Shopping</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <OrderHistory 
+              myOrders={myOrders} 
+              setActiveTab={setActiveTab} 
+            />
           )}
         </main>
         <Footer />
       </div>
 
-      {/* Add/Edit Jewellery Modal */}
-      {showAddModal && (
-        <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black bg-opacity-50">
-          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold text-gray-900">
-                {editingItem ? "Edit Jewellery" : "Add New Jewellery"}
-              </h3>
-              <button
-                onClick={resetForm}
-                className="p-2 text-gray-400 rounded-lg hover:text-gray-600 hover:bg-gray-100"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddJewellery} className="space-y-6">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                {/* Category */}
-                <div>
-                  <label className="block mb-2 text-sm font-medium text-gray-700">
-                    Category
-                  </label>
-                  <select
-                    value={newJewellery.category}
-                    onChange={(e) =>
-                      setNewJewellery({
-                        ...newJewellery,
-                        category: e.target.value,
-                      })
-                    }
-                    className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                    required
-                  >
-                    <option value="">Select Category</option>
-                    {categories.slice(1).map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Name */}
-                <div>
-                  <label className="block mb-2 text-sm font-medium text-gray-700">
-                    Name
-                  </label>
-                  <input
-                    type="text"
-                    value={newJewellery.name}
-                    onChange={(e) =>
-                      setNewJewellery({ ...newJewellery, name: e.target.value })
-                    }
-                    placeholder="Jewellery name"
-                    className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                    required
-                  />
-                </div>
-
-                {/* Price */}
-                <div>
-                  <label className="block mb-2 text-sm font-medium text-gray-700">
-                    Price (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={newJewellery.price}
-                    onChange={(e) =>
-                      setNewJewellery({
-                        ...newJewellery,
-                        price: e.target.value,
-                      })
-                    }
-                    min="0"
-                    className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                    required
-                  />
-                </div>
-
-                {/* Quantity */}
-                <div>
-                  <label className="block mb-2 text-sm font-medium text-gray-700">
-                    Quantity
-                  </label>
-                  <input
-                    type="number"
-                    value={newJewellery.quantity}
-                    onChange={(e) =>
-                      setNewJewellery({
-                        ...newJewellery,
-                        quantity: parseInt(e.target.value) || 1,
-                      })
-                    }
-                    min="1"
-                    className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                    required
-                  />
-                </div>
-
-                {/* Weight */}
-                <div>
-                  <label className="block mb-2 text-sm font-medium text-gray-700">
-                    Weight (g)
-                  </label>
-                  <input
-                    type="number"
-                    value={newJewellery.weight}
-                    onChange={(e) =>
-                      setNewJewellery({
-                        ...newJewellery,
-                        weight: e.target.value,
-                      })
-                    }
-                    min="0"
-                    step="0.1"
-                    className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                    placeholder="Weight in grams"
-                  />
-                </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block mb-2 text-sm font-medium text-gray-700">
-                  Description
-                </label>
-                <textarea
-                  value={newJewellery.description}
-                  onChange={(e) =>
-                    setNewJewellery({
-                      ...newJewellery,
-                      description: e.target.value,
-                    })
-                  }
-                  rows={3}
-                  className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                  placeholder="Describe the jewellery..."
-                />
-              </div>
-
-              {/* Image URL */}
-              <div>
-                <label className="block mb-2 text-sm font-medium text-gray-700">
-                  Image URL
-                </label>
-                <input
-                  type="file"
-                  onChange={handleFileUpload}
-                  className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                  required
-                />
-              </div>
-              {/* Image Preview */}
-              {imagePreview && (
-                <div className="p-4 rounded-xl border border-gray-300">
-                  <p className="mb-3 text-sm font-medium text-gray-700">
-                    Image Preview:
-                  </p>
-                  <img
-                    src={imagePreview}
-                    alt="Preview"
-                    className="object-cover w-full h-48 rounded-xl"
-                  />
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex pt-6 space-x-4">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="flex-1 px-6 py-3 font-medium text-gray-700 bg-gray-100 rounded-xl transition-colors hover:bg-gray-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-6 py-3 font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg transition-all hover:from-amber-600 hover:to-orange-600"
-                >
-                  {editingItem ? "Update" : "Save"} Jewellery
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Cart Modal */}
-      {showCartModal && (
-        <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black bg-opacity-50 ios-modal">
-          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold text-gray-900">
-                Shopping Cart
-              </h3>
-              <button
-                onClick={() => setShowCartModal(false)}
-                className="p-2 text-gray-400 rounded-lg hover:text-gray-600 hover:bg-gray-100"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            {cart.length > 0 ? (
-              <div className="space-y-6">
-                {/* Cart Items */}
-                <div className="bg-gray-50 rounded-2xl divide-y divide-gray-200">
-                  {cart.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center p-4 space-x-4 transition-colors hover:bg-gray-100"
-                    >
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="object-cover w-16 h-16 rounded-xl"
-                      />
-                      <div className="flex-1">
-                        <h4 className="text-base font-semibold text-gray-900">
-                          {item.name}
-                        </h4>
-                        <p className="text-sm text-gray-600">{item.category}</p>
-                        <p className="text-xs text-gray-500">
-                          Weight:{" "}
-                          {(() => {
-                            const w = item.weight;
-                            if (!w) return "N/A";
-                            const ws = String(w).trim();
-                            const weightNum =
-                              parseFloat(ws.replace("g", "")) || 0;
-                            const totalWeight = weightNum * item.quantity;
-                            return `${ws} × ${
-                              item.quantity
-                            } = ${totalWeight.toFixed(1)}g`;
-                          })()}
-                        </p>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <span className="text-sm text-gray-600">
-                          Qty: {item.quantity}
-                        </span>
-                        <button
-                          onClick={() => removeFromCart(item.id)}
-                          className="p-2 text-red-500 rounded-lg transition-colors hover:bg-red-50"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Order Summary */}
-                <div className="p-6 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200">
-                  <h4 className="mb-4 text-lg font-semibold text-gray-900">
-                    Order Summary
-                  </h4>
-
-                  <div className="mb-6 space-y-3">
-                    <div className="flex justify-between text-gray-600">
-                      <span>Total Quantity: {getCartItemCount()}</span>
-                      <span>Items ({cart.length})</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Total Weight:</span>
-                      <span className="font-medium text-amber-600">
-                        {getCartTotalWeight()}g
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={clearCart}
-                      className="flex-1 px-4 py-3 font-medium text-red-600 bg-red-50 rounded-xl border border-red-200 transition-colors hover:bg-red-100 hover:text-red-700"
-                    >
-                      Clear Cart
-                    </button>
-                    <button
-                      onClick={() => {
-                        confirmOrder();
-                        setShowCartModal(false);
-                      }}
-                      className="flex-1 px-4 py-3 font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg transition-all hover:from-amber-600 hover:to-orange-600"
-                    >
-                      Confirm Order
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="py-16 text-center">
-                <ShoppingCart className="mx-auto mb-4 w-16 h-16 text-gray-300" />
-                <h4 className="mb-2 text-lg font-medium text-gray-900">
-                  Your cart is empty
-                </h4>
-                <p className="mb-6 text-gray-600">
-                  Add some beautiful jewellery to your cart
-                </p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      setShowCartModal(false);
-                      setActiveTab("catalog");
-                    }}
-                    className="flex-1 px-6 py-3 font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg transition-all hover:from-amber-600 hover:to-orange-600"
-                  >
-                    Browse Catalogue
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+     
+<Cart
+  showCartModal={showCartModal}
+  setShowCartModal={setShowCartModal}
+  setActiveTab={setActiveTab}
+  onCartUpdate={fetchCartItemsCount}
+  onConfirmOrder={confirmOrder} // Pass the confirmOrder function
+/>
 
       {/* Order Success Modal */}
-      {showOrderSuccessModal && (
-        <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black bg-opacity-50 ios-modal">
-          <div className="p-8 w-full max-w-md text-center bg-white rounded-2xl shadow-xl">
-            <div className="mb-6">
-              <div className="flex justify-center items-center mx-auto mb-4 w-20 h-20 bg-green-100 rounded-full">
-                <CheckCircle className="w-10 h-10 text-green-600" />
-              </div>
-              <h3 className="mb-2 text-2xl font-bold text-gray-900">
-                Order Confirmed!
-              </h3>
-              <p className="text-gray-600">
-                Your order has been successfully placed. You will receive a
-                confirmation email shortly.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <button
-                onClick={() => {
-                  setShowOrderSuccessModal(false);
-                  setActiveTab("bookings");
-                }}
-                className="px-6 py-3 w-full font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg transition-all hover:from-amber-600 hover:to-orange-600"
-              >
-                View My Orders
-              </button>
-              <button
-                onClick={() => {
-                  setShowOrderSuccessModal(false);
-                  setActiveTab("catalog");
-                }}
-                className="px-6 py-3 w-full font-medium text-gray-700 bg-gray-100 rounded-xl transition-colors hover:bg-gray-200"
-              >
-                Continue Shopping
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Order Details Modal */}
-      {showOrderDetailsModal && selectedOrder && (
-        <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black bg-opacity-50 ios-modal">
-          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold text-gray-900">
-                Order Details
-              </h3>
-              <button
-                onClick={() => {
-                  setShowOrderDetailsModal(false);
-                  setSelectedOrder(null);
-                }}
-                className="p-2 text-gray-400 rounded-lg hover:text-gray-600 hover:bg-gray-100"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              {/* Order Header */}
-              <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="mb-4">
-                    <h4 className="text-lg font-semibold text-gray-900">
-                      Order #{selectedOrder.id}
-                    </h4>
-                    <p className="text-sm text-gray-600">
-                      Placed on{" "}
-                      {new Date(selectedOrder.bookingDate).toLocaleDateString()}{" "}
-                      at{" "}
-                      {new Date(selectedOrder.bookingDate).toLocaleTimeString()}
-                    </p>
-                    {selectedOrder.weight && (
-                      <p className="mt-1 text-sm font-medium text-amber-600">
-                        Total Weight:{" "}
-                        {(() => {
-                          const w = selectedOrder.weight;
-                          const ws = String(w).trim();
-                          const weightNum =
-                            parseFloat(ws.replace("g", "")) || 0;
-                          const totalWeight =
-                            weightNum * selectedOrder.quantity;
-                          return `${totalWeight.toFixed(1)}g`;
-                        })()}
-                      </p>
-                    )}
-                  </div>
-                  <span
-                    className={`inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full ${
-                      selectedOrder.status === "Confirmed"
-                        ? "bg-green-100 text-green-800"
-                        : selectedOrder.status === "Processing"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-gray-100 text-gray-800"
-                    }`}
-                  >
-                    {selectedOrder.status || "Confirmed"}
-                  </span>
-                </div>
-
-                {/* Order Items */}
-                <div className="space-y-3">
-                  <h5 className="font-medium text-gray-900">Order Items</h5>
-                  <div className="p-4 bg-white rounded-lg border border-gray-200">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-1">
-                        <h6 className="font-medium text-gray-900">
-                          {selectedOrder.jewelleryName}
-                        </h6>
-                        <p className="text-sm text-gray-600">
-                          {selectedOrder.category}
-                        </p>
-                        {selectedOrder.weight && (
-                          <p className="text-xs text-gray-500">
-                            Weight:{" "}
-                            {(() => {
-                              const w = selectedOrder.weight;
-                              if (!w) return "N/A";
-                              const ws = String(w).trim();
-                              const weightNum =
-                                parseFloat(ws.replace("g", "")) || 0;
-                              const totalWeight =
-                                weightNum * selectedOrder.quantity;
-                              return `${ws} × ${
-                                selectedOrder.quantity
-                              } = ${totalWeight.toFixed(1)}g`;
-                            })()}
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-gray-600">
-                          Quantity: {selectedOrder.quantity}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Order Progress */}
-              <div className="p-4 bg-gray-50 rounded-xl">
-                <h5 className="mb-4 font-medium text-gray-900">
-                  Order Progress
-                </h5>
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="flex justify-center items-center w-8 h-8 bg-green-100 rounded-full">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        Order Confirmed
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Your order has been received and confirmed
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-3">
-                    <div
-                      className={`flex justify-center items-center w-8 h-8 rounded-full ${
-                        selectedOrder.status === "Processing"
-                          ? "bg-yellow-100"
-                          : "bg-gray-100"
-                      }`}
-                    >
-                      {selectedOrder.status === "Processing" ? (
-                        <Clock className="w-4 h-4 text-yellow-600" />
-                      ) : (
-                        <Clock className="w-4 h-4 text-gray-400" />
-                      )}
-                    </div>
-                    <div>
-                      <p
-                        className={`font-medium ${
-                          selectedOrder.status === "Processing"
-                            ? "text-gray-900"
-                            : "text-gray-500"
-                        }`}
-                      >
-                        Processing
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Your order is being prepared
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-3">
-                    <div className="flex justify-center items-center w-8 h-8 bg-gray-100 rounded-full">
-                      <Truck className="w-4 h-4 text-gray-400" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-500">Shipped</p>
-                      <p className="text-sm text-gray-600">
-                        Your order will be shipped soon
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-3">
-                    <div className="flex justify-center items-center w-8 h-8 bg-gray-100 rounded-full">
-                      <Shield className="w-4 h-4 text-gray-400" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-500">Delivered</p>
-                      <p className="text-sm text-gray-600">
-                        Your order will be delivered safely
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Shipping & Billing Info */}
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <h5 className="mb-3 font-medium text-gray-900">
-                    Shipping Information
-                  </h5>
-                  <div className="space-y-2 text-sm">
-                    <p>
-                      <span className="font-medium">Address:</span> To be
-                      collected from store
-                    </p>
-                    <p>
-                      <span className="font-medium">Method:</span> In-store
-                      pickup
-                    </p>
-                    <p>
-                      <span className="font-medium">Estimated Time:</span> 5-7
-                      days
-                    </p>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <h5 className="mb-3 font-medium text-gray-900">
-                    Billing Information
-                  </h5>
-                  <div className="space-y-2 text-sm">
-                    <p>
-                      <span className="font-medium">Payment Method:</span> Cash
-                      on Delivery
-                    </p>
-                    <p>
-                      <span className="font-medium">Subtotal:</span> Price to be
-                      calculated
-                    </p>
-                    <p>
-                      <span className="font-medium">Shipping:</span> Free
-                    </p>
-                    <p className="font-medium text-amber-600">
-                      <span className="font-medium">Total:</span> Price to be
-                      calculated
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex pt-4 space-x-4">
-                <button
-                  onClick={() => {
-                    setShowOrderDetailsModal(false);
-                    setSelectedOrder(null);
-                  }}
-                  className="flex-1 px-6 py-3 font-medium text-gray-700 bg-gray-100 rounded-xl transition-colors hover:bg-gray-200"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={() => {
-                    // Could add functionality to reorder or contact support
-                  }}
-                  className="flex-1 px-6 py-3 font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg transition-all hover:from-amber-600 hover:to-orange-600"
-                >
-                  Need Help?
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <OrderSuccessModal />
 
       {/* Back to Top Button */}
-      {showBackToTop && !sidebarOpen && (
-        <button
-          onClick={scrollToTop}
-          className="fixed right-6 bottom-24 z-40 p-3 text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-full shadow-lg transition-all duration-300 transform hover:shadow-xl hover:scale-110 active:scale-95 md:bottom-8 animate-fade-in-up"
-          title="Back to Top"
-        >
-          <ArrowUp className="w-5 h-5" />
-        </button>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deleteConfirm && (
-        <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black bg-opacity-50 ios-modal">
-          <div className="p-6 w-full max-w-md bg-white rounded-2xl shadow-xl">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Confirm Deletion
-              </h3>
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="p-2 text-gray-400 rounded-lg hover:text-gray-600 hover:bg-gray-100"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="mb-6">
-              <div className="flex items-center p-4 space-x-4 bg-red-50 rounded-xl border border-red-200">
-                <img
-                  src={deleteConfirm.image}
-                  alt={deleteConfirm.name}
-                  className="object-cover w-16 h-16 rounded-lg"
-                />
-                <div>
-                  <h4 className="font-semibold text-gray-900">
-                    {deleteConfirm.name}
-                  </h4>
-                  <p className="text-sm text-gray-600">
-                    {deleteConfirm.category}
-                  </p>
-                  <p className="text-sm font-medium text-amber-600">
-                    ₹{deleteConfirm.price.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-              <p className="mt-4 text-gray-700">
-                Are you sure you want to delete this item? This action cannot be
-                undone.
-              </p>
-            </div>
-
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="flex-1 px-4 py-3 font-medium text-gray-700 bg-gray-100 rounded-xl transition-colors hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                className="flex-1 px-4 py-3 font-medium text-white bg-red-500 rounded-xl transition-colors hover:bg-red-600"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <BackToTopButton />
 
       {/* Toast Notification */}
-      {toast && (
-        <div className="fixed right-4 bottom-4 left-4 z-50 sm:bottom-6 sm:left-auto sm:right-6 animate-slide-up">
-          <div
-            className={`flex items-center p-3 sm:p-4 rounded-xl shadow-lg border transition-all duration-300 ${
-              toast.type === "success"
-                ? "bg-green-50 border-green-200 text-green-800"
-                : "bg-red-50 border-red-200 text-red-800"
-            }`}
-          >
-            <div className="flex flex-1 items-center space-x-3">
-              {toast.type === "success" ? (
-                <CheckCircle className="flex-shrink-0 w-4 h-4 text-green-600 sm:w-5 sm:h-5" />
-              ) : (
-                <X className="flex-shrink-0 w-4 h-4 text-red-600 sm:w-5 sm:h-5" />
-              )}
-              <p className="flex-1 text-xs font-medium sm:text-sm sm:text-base">
-                {toast.message}
-              </p>
-            </div>
-            <button
-              onClick={() => setToast(null)}
-              className="flex-shrink-0 ml-2 text-gray-400 transition-colors sm:ml-4 hover:text-gray-600"
-            >
-              <X className="w-3 h-3 sm:w-4 sm:h-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      <ToastNotification />
     </div>
   );
 };
