@@ -144,22 +144,8 @@ const Login = () => {
           </button>
         </form>
 
-        {/* Credentials Hint */}
-        <div className="p-4 mt-6 text-sm text-gray-300 rounded-lg border bg-white/5 border-white/10">
-          <h3 className="mb-2 font-semibold text-white">Demo Credentials</h3>
-          <ul className="space-y-1">
-            <li>
-              <strong>Admin:</strong> ID:{" "}
-              <code className="text-white">admin</code>, Password:{" "}
-              <code className="text-white">admin123</code>
-            </li>
-            <li>
-              <strong>User:</strong> ID:{" "}
-              <code className="text-white">user</code>, Password:{" "}
-              <code className="text-white">user123</code>
-            </li>
-          </ul>
-        </div>
+     
+     
         </div>
       </div>
       
