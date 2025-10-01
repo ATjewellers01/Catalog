@@ -110,7 +110,6 @@ const UserDashboard = () => {
   }, [activeTab]);
 
   // Fetch cart items count
-// Fix the fetchCartItemsCount function
 const fetchCartItemsCount = async () => {
   try {
     const userData = localStorage.getItem('users');
@@ -118,13 +117,11 @@ const fetchCartItemsCount = async () => {
 
     const user = JSON.parse(userData);
     const userId = user.id;
-
     if (!userId) return;
 
-    // FIXED: table name is 'cart_item' not 'cart_items'
-    const { data, error } = await supabase
-      .from('cart_item') // Changed from 'cart_items'
-      .select('id, quantity')
+    const { count, error } = await supabase
+      .from('cart_item')
+      .select('id', { count: 'exact', head: true }) // head:true avoids fetching rows
       .eq('user_id', userId);
 
     if (error) {
@@ -132,14 +129,16 @@ const fetchCartItemsCount = async () => {
       return;
     }
 
-    const totalItems = data?.reduce((total, item) => total + (parseInt(item.quantity) || 0), 0) || 0;
-    setCartItemsCount(totalItems);
+    setCartItemsCount(count || 0);
 
   } catch (error) {
     console.error('Error in fetchCartItemsCount:', error);
   }
 };
 
+
+
+//
   // Fetch categories
   const fetchCategories = async () => {
     setLoading(true);
@@ -281,7 +280,7 @@ const handleAddToCartClick = async (item) => {
     });
 
     // Refresh cart count after adding
-    setTimeout(() => fetchCartItemsCount(), 500);
+   setTimeout(() => updateCartCount(), 500);
 
   } catch (error) {
     console.error('Error in handleAddToCartClick:', error);
@@ -326,6 +325,58 @@ const syncCartItems = async () => {
 useEffect(() => {
   syncCartItems();
 }, []);
+
+const handleRemoveFromCart = async (productId) => {
+  try {
+    const userData = localStorage.getItem('users');
+    if (!userData) return;
+
+    const user = JSON.parse(userData);
+    const userId = user.id;
+
+    const { error } = await supabase
+      .from('cart_item')
+      .delete()
+      .eq('user_id', userId)
+      .eq('product_id', productId);
+
+    if (error) {
+      console.error('Error removing from cart:', error);
+      setToast({
+        message: 'Failed to remove item from cart',
+        type: "error",
+        duration: 3000,
+      });
+      return;
+    }
+
+    // Update visual state immediately
+    setClickedItems(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(productId);
+      return newSet;
+    });
+
+    // Update cart count immediately
+    await updateCartCount();
+
+    setToast({
+      message: 'Item removed from cart',
+      type: "success",
+      duration: 3000,
+    });
+
+  } catch (error) {
+    console.error('Error in handleRemoveFromCart:', error);
+  }
+};
+
+// Add this function to update cart count
+const updateCartCount = async () => {
+  await fetchCartItemsCount();
+  await syncCartItems();
+};
+
 
 const confirmOrder = async () => {
   try {
@@ -487,8 +538,7 @@ const confirmOrder = async () => {
     if (clearError) {
       console.error('Error clearing cart after order:', clearError);
     } else {
-      setCartItemsCount(0); // Reset cart count
-      setClickedItems(new Set()); // Clear clicked items
+    await updateCartCount();
     }
 
     // Set order just placed flag for cart message
@@ -815,6 +865,9 @@ const confirmOrder = async () => {
                   setSortBy={setSortBy}
                   clickedItems={clickedItems}
                   handleAddToCartClick={handleAddToCartClick}
+                   handleRemoveFromCart={handleRemoveFromCart} // Add this
+  setToast={setToast} // Add this
+  updateCartCount={updateCartCount} // Add this
                 />
               )}
             </div>
@@ -837,8 +890,8 @@ const confirmOrder = async () => {
   showCartModal={showCartModal}
   setShowCartModal={setShowCartModal}
   setActiveTab={setActiveTab}
-  onCartUpdate={fetchCartItemsCount}
-  onConfirmOrder={confirmOrder} // Pass the confirmOrder function
+  onCartUpdate={fetchCartItemsCount} // Pass the update function
+  onConfirmOrder={confirmOrder}
 />
 
       {/* Order Success Modal */}

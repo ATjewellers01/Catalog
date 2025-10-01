@@ -18,6 +18,9 @@ const CategoryProducts = ({
   setSortBy,
   clickedItems,
   handleAddToCartClick,
+   handleRemoveFromCart, // Add this prop
+  setToast, // Add this prop
+  updateCartCount // Add this prop
   
 }) => {
   const [addingToCart, setAddingToCart] = useState({});
@@ -98,25 +101,29 @@ const CategoryProducts = ({
     }
   };
 
-const handleAddToCart = async (product) => {
-  setAddingToCart(prev => ({ ...prev, [product.id]: true }));
-  try {
-    await handleAddToCartClick({
-      id: product.id,
-      name: product.product_name,
-      category_name: product.category_name
-    });
-    await fetchCartItems(); // ✅ refresh after adding
-  } finally {
-    setAddingToCart(prev => ({ ...prev, [product.id]: false }));
-  }
-};
+  const handleAddToCart = async (product) => {
+    setAddingToCart(prev => ({ ...prev, [product.id]: true }));
+    try {
+      await handleAddToCartClick({
+        id: product.id,
+        name: product.product_name,
+        category_name: product.category_name
+      });
+      await fetchCartItems(); // Refresh cart items after adding
+    } finally {
+      setAddingToCart(prev => ({ ...prev, [product.id]: false }));
+    }
+  };
 
 
-  const handleRemoveFromCart = async (product) => {
-    await removeFromCartInSupabase(product);
-    // Refresh cart items after removal
-    fetchCartItems();
+  const handleRemoveClick = async (product) => {
+    setRemovingFromCart(prev => ({ ...prev, [product.id]: true }));
+    try {
+      await handleRemoveFromCart(product.id);
+      await fetchCartItems(); // Refresh cart items after removal
+    } finally {
+      setRemovingFromCart(prev => ({ ...prev, [product.id]: false }));
+    }
   };
 
   // Fetch cart items on component mount
@@ -226,16 +233,16 @@ const handleAddToCart = async (product) => {
               }
             })
             .map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                clickedItems={clickedItems}
-                onAddToCart={handleAddToCart}
-                onRemoveFromCart={handleRemoveFromCart}
-                addingToCart={addingToCart[product.id] || false}
-                removingFromCart={removingFromCart[product.id] || false}
-                isInCart={isProductInCart(product.id)}
-              />
+            <ProductCard
+    key={product.id}
+    product={product}
+    clickedItems={clickedItems}
+    onAddToCart={handleAddToCart}
+    onRemoveFromCart={handleRemoveClick} // Use the new function
+    addingToCart={addingToCart[product.id] || false}
+    removingFromCart={removingFromCart[product.id] || false}
+    isInCart={isProductInCart(product.id)}
+  />
             ))}
         </div>
       )}
@@ -294,24 +301,28 @@ const ProductCard = ({
     view
   </div>
 
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      isInCart ? onRemoveFromCart(product) : onAddToCart(product);
-    }}
-    disabled={addingToCart || removingFromCart}
-    className={`p-2 rounded-full text-white shadow-lg border border-white/20 transition-transform hover:scale-110 active:scale-95 ${
-      isInCart
-        ? "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-        : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
-    }`}
-  >
-    {(addingToCart || removingFromCart) ? (
-      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-    ) : (
-      <ShoppingCart className="w-5 h-5" />
-    )}
-  </button>
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    if (isInCart) {
+      onRemoveFromCart(product); // This should be the product object
+    } else {
+      onAddToCart(product);
+    }
+  }}
+  disabled={addingToCart || removingFromCart}
+  className={`p-2 rounded-full text-white shadow-lg border border-white/20 transition-transform hover:scale-110 active:scale-95 ${
+    isInCart
+      ? "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+      : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
+  }`}
+>
+  {(addingToCart || removingFromCart) ? (
+    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+  ) : (
+    <ShoppingCart className="w-5 h-5" />
+  )}
+</button>
 </div>
 
 

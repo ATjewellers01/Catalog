@@ -6,8 +6,8 @@ import supabase from '../SupabaseClient';
 const Cart = ({ 
   showCartModal, 
   setShowCartModal, 
-  setActiveTab,
-    onCartUpdate,
+  setActiveTab, 
+  onCartUpdate, // Add this prop
   onConfirmOrder 
 }) => {
   const [cartItems, setCartItems] = useState([]);
