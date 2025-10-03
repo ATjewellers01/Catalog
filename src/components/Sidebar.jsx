@@ -59,7 +59,7 @@ const Sidebar = ({
         <div className="p-6 border-b border-gray-200">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">AT Jeweller</h1>
+              <h1 className="text-xl font-bold text-gray-900">At plus jewellers</h1>
               <p className="text-sm text-gray-500">Dashboard</p>
             </div>
             {isMobile && (

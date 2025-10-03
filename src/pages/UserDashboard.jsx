@@ -788,7 +788,7 @@ const CategoriesGallery = () => {
           )}
         </div>
         <div className="text-base font-semibold text-gray-800">
-          AT Jeweller
+          At plus jewellers
         </div>
         <div className="absolute right-0">
           <div className="flex items-center space-x-3">

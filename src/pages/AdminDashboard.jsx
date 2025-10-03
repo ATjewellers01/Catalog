@@ -316,7 +316,7 @@ const handleDownloadOrderPDF = async (order) => {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
     doc.setFont(undefined, 'bold');
-    doc.text("AT Jeweller", margin + 35, margin + 10);
+    doc.text("At plus jewellers", margin + 35, margin + 10);
     doc.setFontSize(14);
     doc.setFont(undefined, 'normal');
     doc.text("Order Receipt", pageWidth - margin, margin + 10, { align: 'right' });

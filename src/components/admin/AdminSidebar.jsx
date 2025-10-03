@@ -33,7 +33,7 @@ const AdminSidebar = ({
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-xl font-bold text-gray-900">
-                AT Jeweller
+                At plus jewellers
               </h1>
               <p className="text-sm text-gray-500">Admin Dashboard</p>
             </div>

@@ -40,7 +40,7 @@ const Login = () => {
             AT
           </div>
           <h1 className="text-lg font-bold text-gray-100 sm:text-xl lg:text-2xl">
-            AT Jeweller
+            At plus jewellers
           </h1>
           <h2 className="mt-1 text-xl font-semibold text-white sm:text-2xl lg:text-3xl">
             Catalog
