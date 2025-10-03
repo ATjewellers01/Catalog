@@ -182,6 +182,11 @@ const fetchCategoriesFromSupabase = async () => {
 
     console.log("✅ Categories fetched from Supabase:", categories);
 
+  if (!categories || categories.length === 0) {
+      setCategoriesData([]);
+      return;
+    }
+
     if (categories && categories.length > 0) {
       const categoryImagesFromDB = {};
       const categoryNames = ['All'];
@@ -194,6 +199,36 @@ const fetchCategoriesFromSupabase = async () => {
         categoryNames.push(category.category_name);
         categoriesWithData.push(category); // Store the full category object
       });
+
+ const categoriesWithProducts = await Promise.all(
+      categoriesData.map(async (category) => {
+        const categoryid = category.id ;
+        
+        // Check if this category has any products
+        const { data: productsData, error: productsError } = await supabase
+          .from("products")
+          .select("id", { count: 'exact' })
+          .eq("category_id", categoryid)
+          .is("status", null);
+
+        if (productsError) {
+          console.error(`Error checking products for category ${categoryid}:`, productsError);
+          return { ...category, hasProducts: false };
+        }
+
+        // Return category with hasProducts flag
+        const hasProducts = (productsData && productsData.length > 0);
+        console.log(`Category ${categoryid} has products:`, hasProducts);
+        
+        return {
+          ...category,
+          hasProducts: hasProducts
+        };
+      })
+    );
+
+    console.log("Categories with product info:", categoriesWithProducts);
+    setCategoriesData(categoriesWithProducts);
 
       setCategoryImages(categoryImagesFromDB);
       setUniqueCategories(categoryNames);
@@ -832,9 +867,10 @@ const handleDownloadOrderPDF = async (order) => {
           <main className="flex-1 p-4 pb-28 sm:p-6 lg:pb-6">
             {/* Categories Tab */}
             {activeTab === "categories" && (
-             <CategoriesTab
+          // In AdminDashboard.jsx - update the CategoriesTab usage
+<CategoriesTab
   loadingCategories={loadingCategories}
-  categoriesData={categoriesData} // Pass categoriesData instead of uniqueCategories
+  categoriesData={categoriesData}
   selectedCategory={selectedCategory}
   setSelectedCategory={setSelectedCategory}
   getCategoryCover={getCategoryCover}
@@ -844,6 +880,7 @@ const handleDownloadOrderPDF = async (order) => {
   categoryImages={categoryImages}
   setCategoryImages={setCategoryImages}
   fetchCategoriesFromSupabase={fetchCategoriesFromSupabase}
+  jewellery={jewellery} // Add this line
 />
             )}
 

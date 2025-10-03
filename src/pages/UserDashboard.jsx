@@ -1,5 +1,5 @@
 // UserDashboard.jsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { 
   ShoppingCart, 
@@ -49,6 +49,8 @@ const UserDashboard = () => {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [loading, setLoading] = useState(false);
   const [cartItemsCount, setCartItemsCount] = useState(0); // Add this state for cart count
+  const toastRef = useRef(null);
+ const [cartLoading, setCartLoading] = useState(new Set());
 
   // Prevent automatic scroll restoration
   useEffect(() => {
@@ -136,44 +138,78 @@ const fetchCartItemsCount = async () => {
   }
 };
 
+// Fetch categories with product count
+const fetchCategories = async () => {
+  setLoading(true);
+  try {
+    // First, fetch all categories
+    const { data: categoriesData, error: categoriesError } = await supabase
+      .from("categories")
+      .select("*");
 
-
-//
-  // Fetch categories
-  const fetchCategories = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("categories")
-        .select("*");
-
-      if (error) {
-        console.error("Error fetching categories:", error.message);
-        setCategories([]);
-      } else {
-        console.log("Fetched categories successfully", data);
-        setCategories(data);
-      }
-    } catch (error) {
-      console.error("Error in fetchCategories:", error);
+    if (categoriesError) {
+      console.error("Error fetching categories:", categoriesError.message);
       setCategories([]);
+      return;
     }
-    setLoading(false);
-  };
 
+    if (!categoriesData || categoriesData.length === 0) {
+      setCategories([]);
+      return;
+    }
+
+    console.log("Fetched categories successfully", categoriesData);
+
+    // Check which categories have products
+    const categoriesWithProducts = await Promise.all(
+      categoriesData.map(async (category) => {
+        const categoryId = category.id ;
+        
+        // Check if this category has any products
+        const { data: productsData, error: productsError } = await supabase
+          .from("products")
+          .select("id", { count: 'exact' })
+          .eq("category_id", categoryId)
+          .is("status", null);
+
+        if (productsError) {
+          console.error(`Error checking products for category ${categoryId}:`, productsError);
+          return { ...category, hasProducts: false };
+        }
+
+        // Return category with hasProducts flag
+        const hasProducts = (productsData && productsData.length > 0);
+        console.log(`Category ${categoryId} has products:`, hasProducts);
+        
+        return {
+          ...category,
+          hasProducts: hasProducts
+        };
+      })
+    );
+
+    console.log("Categories with product info:", categoriesWithProducts);
+    setCategories(categoriesWithProducts);
+
+  } catch (error) {
+    console.error("Error in fetchCategories:", error);
+    setCategories([]);
+  }
+  setLoading(false);
+};
   useEffect(() => {
     fetchCategories();
-    fetchCartItemsCount(); // Fetch cart count on component mount
+   // fetchCartItemsCount(); // Fetch cart count on component mount
   }, []);
 
   // Fetch products by category
-  const fetchProductsByCategory = async (categoryName) => {
+  const fetchProductsByCategory = async (categoryId) => {
     setProductsLoading(true);
     try {
       const { data, error } = await supabase
         .from("products")
         .select("*")
-        .eq("category_name", categoryName)
+        .eq("category_id", categoryId)
       .is("status",null)
         .order("created_at", { ascending: false });
 
@@ -194,7 +230,7 @@ const fetchCartItemsCount = async () => {
   // Fetch products when category changes
   useEffect(() => {
     if (selectedCategory !== "All") {
-      fetchProductsByCategory(selectedCategory);
+      fetchProductsByCategory(categories.id);
     } else {
       setProducts([]);
     }
@@ -207,9 +243,28 @@ const fetchCartItemsCount = async () => {
     }
   }, [showCartModal]);
 
-const handleAddToCartClick = async (item) => {
+// In UserDashboard.jsx - improve the processing state
+const [processingItems, setProcessingItems] = useState(new Set());
+
+// In UserDashboard.jsx - update handleAddToCartClick
+const handleAddToCartClick = useCallback(async (item, event) => {
+  // More robust check for processing items
+  if (processingItems.has(item.id)) {
+    console.log('🚫 BLOCKING - Item already processing:', item.id);
+    return;
+  }
+
   try {
-    // Check if item is already in cart in Supabase
+    // Mark as processing immediately
+    setProcessingItems(prev => {
+      const newSet = new Set(prev);
+      newSet.add(item.id);
+      console.log('📝 Added to processing:', item.id, 'Current:', Array.from(newSet));
+      return newSet;
+    });
+
+    console.log('🟢 Starting to process item:', item.id);
+
     const userData = localStorage.getItem('users');
     if (!userData) {
       setToast({
@@ -232,15 +287,9 @@ const handleAddToCartClick = async (item) => {
 
     if (error) {
       console.error('Error checking cart:', error);
-      setToast({
-        message: 'Error checking cart',
-        type: "error",
-        duration: 3000,
-      });
       return;
     }
 
-    // If item already exists in cart
     if (existingCartItems && existingCartItems.length > 0) {
       setToast({
         message: `${item.name || item.product_name} is already in your cart!`,
@@ -250,7 +299,7 @@ const handleAddToCartClick = async (item) => {
       return;
     }
 
-    // If item is not in cart, add it
+    // Add to cart
     const { data, error: insertError } = await supabase
       .from('cart_item')
       .insert([{ 
@@ -263,35 +312,51 @@ const handleAddToCartClick = async (item) => {
 
     if (insertError) {
       console.error('Error adding to cart:', insertError);
-      setToast({
-        message: 'Failed to add item to cart',
-        type: "error",
-        duration: 3000,
-      });
       return;
     }
 
     // Update visual state
-   setClickedItems((prev) => new Set(prev).add(item.id));
+    setClickedItems((prev) => new Set(prev).add(item.id));
+    
+    // Show toast - ONLY ONCE
+    console.log('🎉 Showing toast for item:', item.id);
     setToast({
       message: `Added ${item.name || item.product_name} to cart!`,
       type: "success",
       duration: 3000,
     });
 
-    // Refresh cart count after adding
-   setTimeout(() => updateCartCount(), 500);
+    // Refresh cart count
+    await updateCartCount();
 
   } catch (error) {
-    console.error('Error in handleAddToCartClick:', error);
-    setToast({
-      message: 'Failed to add item to cart',
-      type: "error",
-      duration: 3000,
-    });
+    console.error('❌ Error in handleAddToCartClick:', error);
+  } finally {
+    // Remove from processing after operation completes
+    setTimeout(() => {
+      setProcessingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(item.id);
+        console.log('🗑️ Removed from processing:', item.id, 'Remaining:', Array.from(newSet));
+        return newSet;
+      });
+    }, 1000);
   }
-};
+}, [processingItems]);
 
+// In UserDashboard.jsx - add this debug useEffect
+useEffect(() => {
+  if (toast) {
+    console.log('🔔 TOAST SHOWN:', toast.message, 'at:', new Date().toISOString());
+  }
+}, [toast]);
+
+const handleViewMyOrders = () => {
+  setShowOrderSuccessModal(false);  // close success modal
+  setOrderJustPlaced(false);        // clear "just placed" flag
+  setActiveTab("bookings");         // go directly to bookings tab
+  setShowCartModal(false);          // Close cart modal if it's open
+};
 
 // Add this function in UserDashboard.jsx
 const syncCartItems = async () => {
@@ -326,6 +391,23 @@ useEffect(() => {
   syncCartItems();
 }, []);
 
+// In UserDashboard.jsx - add these helper functions
+const showSuccessToast = (message) => {
+  setToast({
+    message,
+    type: "success",
+    duration: 3000,
+  });
+};
+
+const showErrorToast = (message) => {
+  setToast({
+    message,
+    type: "error",
+    duration: 3000,
+  });
+};
+
 const handleRemoveFromCart = async (productId) => {
   try {
     const userData = localStorage.getItem('users');
@@ -342,6 +424,7 @@ const handleRemoveFromCart = async (productId) => {
 
     if (error) {
       console.error('Error removing from cart:', error);
+      // Only show error toast if there's actually an error
       setToast({
         message: 'Failed to remove item from cart',
         type: "error",
@@ -360,11 +443,12 @@ const handleRemoveFromCart = async (productId) => {
     // Update cart count immediately
     await updateCartCount();
 
-    setToast({
-      message: 'Item removed from cart',
-      type: "success",
-      duration: 3000,
-    });
+    // REMOVE or COMMENT OUT this success toast to avoid duplicate toasts
+    // setToast({
+    //   message: 'Item removed from cart',
+    //   type: "success",
+    //   duration: 3000,
+    // });
 
   } catch (error) {
     console.error('Error in handleRemoveFromCart:', error);
@@ -377,6 +461,17 @@ const updateCartCount = async () => {
   await syncCartItems();
 };
 
+// In UserDashboard.jsx - ensure you have this useEffect
+useEffect(() => {
+  const mq = window.matchMedia("(min-width: 1024px)");
+  const handleChange = () => {
+    setSidebarOpen(mq.matches);
+    setIsMobile(!mq.matches);
+  };
+  handleChange();
+  mq.addEventListener("change", handleChange);
+  return () => mq.removeEventListener("change", handleChange);
+}, []);
 
 const confirmOrder = async () => {
   try {
@@ -563,6 +658,8 @@ const confirmOrder = async () => {
   }
 };
 
+
+
   const handleCategoryChange = (category) => {
     const scrollPosition = window.pageYOffset;
     setSelectedCategory(category);
@@ -595,58 +692,82 @@ const confirmOrder = async () => {
     return `${cleanBase}/${clean}`;
   };
 
-  // CategoriesGallery Component (merged)
-  const CategoriesGallery = () => (
-    <div className="space-y-4">
-      <h2 className="mt-4 text-2xl font-bold text-gray-900">Categories</h2>
-      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {Array.isArray(categories) && categories.length > 0 ? (
-          categories.map((category) => {
-            const categoryName = category.name || category.category_name || category.title;
-            const imageUrl = category.image_url || category.image || category.cover_image || asset("download.jpg");
-            
-            return (
-              <div
-                key={category.id || categoryName}
-                onClick={() => {
+// CategoriesGallery Component (updated with sold out badge)
+const CategoriesGallery = () => (
+  <div className="space-y-4">
+    <h2 className="mt-4 text-2xl font-bold text-gray-900">Categories</h2>
+    <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {Array.isArray(categories) && categories.length > 0 ? (
+        categories.map((category) => {
+          const categoryName = category.name || category.category_name || category.title;
+          const imageUrl = category.image_url || category.image || category.cover_image || asset("download.jpg");
+          const hasProducts = category.hasProducts !== false; // Default to true if not specified
+          
+          return (
+            <div
+              key={category.id || categoryName}
+              onClick={() => {
+                if (hasProducts) {
                   setSelectedCategory(categoryName);
                   setCurrentPage(1);
-                }}
-                className="overflow-hidden relative z-10 rounded-2xl border border-gray-200 shadow-md transition-all duration-300 cursor-pointer group hover:shadow-xl hover:-translate-y-1"
-              >
-                <div className="relative">
-                  <img
-                    src={imageUrl}
-                    alt={categoryName}
-                    className="object-cover w-full h-56 transition-transform duration-500 sm:h-52 md:h-60 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t to-transparent from-black/60 via-black/10" />
-                  <div className="absolute right-0 bottom-0 left-0 p-4">
-                    <div className="flex justify-between items-end">
-                      <div>
-                        <h3 className="text-lg font-bold text-white">
-                          {categoryName}
-                        </h3>
-                        <p className="text-xs text-white/80">
-                          Tap to view products
-                        </p>
-                      </div>
+                }
+              }}
+              className={`overflow-hidden relative z-10 rounded-2xl border shadow-md transition-all duration-300 group ${
+                hasProducts 
+                  ? "cursor-pointer border-gray-200 hover:shadow-xl hover:-translate-y-1" 
+                  : "cursor-not-allowed border-gray-300 opacity-70"
+              }`}
+            >
+              <div className="relative">
+                <img
+                  src={imageUrl}
+                  alt={categoryName}
+                  className={`object-cover w-full h-56 transition-transform duration-500 sm:h-52 md:h-60 ${
+                    hasProducts ? "group-hover:scale-105" : ""
+                  }`}
+                />
+                
+                {/* Sold Out Badge - Top Right Corner */}
+                {!hasProducts && (
+                  <div className="absolute top-3 right-3 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-lg shadow-lg z-10">
+                    SOLD OUT
+                  </div>
+                )}
+                
+                <div className={`absolute inset-0 bg-gradient-to-t to-transparent ${
+                  hasProducts ? "from-black/60 via-black/10" : "from-gray-500/70 via-gray-400/30"
+                }`} />
+                
+                <div className="absolute right-0 bottom-0 left-0 p-4">
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <h3 className={`text-lg font-bold ${
+                        hasProducts ? "text-white" : "text-gray-300"
+                      }`}>
+                        {categoryName}
+                      </h3>
+                      <p className={`text-xs ${
+                        hasProducts ? "text-white/80" : "text-gray-400"
+                      }`}>
+                        {hasProducts ? "Tap to view products" : "No products available"}
+                      </p>
                     </div>
                   </div>
                 </div>
               </div>
-            );
-          })
-        ) : (
-          <div className="col-span-full py-8 text-center">
-            <p className="text-gray-500">
-              {loading ? "Loading categories..." : "No categories available"}
-            </p>
-          </div>
-        )}
-      </div>
+            </div>
+          );
+        })
+      ) : (
+        <div className="col-span-full py-8 text-center">
+          <p className="text-gray-500">
+            {loading ? "Loading categories..." : "No categories available"}
+          </p>
+        </div>
+      )}
     </div>
-  );
+  </div>
+);
 
   // TopBar Component (merged) - FIXED: using cartItemsCount instead of cart
   const TopBar = () => (
@@ -687,47 +808,45 @@ const confirmOrder = async () => {
   );
 
   // OrderSuccessModal Component (merged)
-  const OrderSuccessModal = () => {
-    if (!showOrderSuccessModal) return null;
+const OrderSuccessModal = () => {
+  if (!showOrderSuccessModal) return null;
 
-    return (
-      <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black bg-opacity-50 ios-modal">
-        <div className="p-8 w-full max-w-md text-center bg-white rounded-2xl shadow-xl">
-          <div className="mb-6">
-            <div className="flex justify-center items-center mx-auto mb-4 w-20 h-20 bg-green-100 rounded-full">
-              <CheckCircle className="w-10 h-10 text-green-600" />
-            </div>
-            <h3 className="mb-2 text-2xl font-bold text-gray-900">Order Confirmed!</h3>
-            <p className="text-gray-600">
-              Your order has been successfully placed. You will receive a
-              confirmation email shortly.
-            </p>
+  return (
+    <div className="flex fixed inset-0 z-50 justify-center items-center p-4 bg-black bg-opacity-50 ios-modal">
+      <div className="p-8 w-full max-w-md text-center bg-white rounded-2xl shadow-xl">
+        <div className="mb-6">
+          <div className="flex justify-center items-center mx-auto mb-4 w-20 h-20 bg-green-100 rounded-full">
+            <CheckCircle className="w-10 h-10 text-green-600" />
           </div>
+          <h3 className="mb-2 text-2xl font-bold text-gray-900">Order Confirmed!</h3>
+          <p className="text-gray-600">
+            Your order has been successfully placed. You will receive a
+            confirmation email shortly.
+          </p>
+        </div>
 
-          <div className="space-y-3">
-            <button
-              onClick={() => {
-                setShowOrderSuccessModal(false);
-                setActiveTab("bookings");
-              }}
-              className="px-6 py-3 w-full font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg transition-all hover:from-amber-600 hover:to-orange-600"
-            >
-              View My Orders
-            </button>
-            <button
-              onClick={() => {
-                setShowOrderSuccessModal(false);
-                setActiveTab("catalog");
-              }}
-              className="px-6 py-3 w-full font-medium text-gray-700 bg-gray-100 rounded-xl transition-colors hover:bg-gray-200"
-            >
-              Continue Shopping
-            </button>
-          </div>
+        <div className="space-y-3">
+          <button
+            onClick={handleViewMyOrders}
+            className="px-6 py-3 w-full font-medium text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl shadow-lg transition-all hover:from-amber-600 hover:to-orange-600"
+          >
+            View My Orders
+          </button>
+          <button
+            onClick={() => {
+              setShowOrderSuccessModal(false);
+              setActiveTab("catalog");
+              setShowCartModal(false); // Also close cart modal
+            }}
+            className="px-6 py-3 w-full font-medium text-gray-700 bg-gray-100 rounded-xl transition-colors hover:bg-gray-200"
+          >
+            Continue Shopping
+          </button>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   // ToastNotification Component (merged)
   const ToastNotification = () => {
@@ -850,47 +969,53 @@ const confirmOrder = async () => {
 
               {/* Category Products */}
               {selectedCategory !== "All" && (
-                <CategoryProducts
-                  selectedCategory={selectedCategory}
-                  setSelectedCategory={setSelectedCategory}
-                  products={products}
-                  productsLoading={productsLoading}
-                  showFilters={showFilters}
-                  setShowFilters={setShowFilters}
-                  minWeight={minWeight}
-                  setMinWeight={setMinWeight}
-                  maxWeight={maxWeight}
-                  setMaxWeight={setMaxWeight}
-                  sortBy={sortBy}
-                  setSortBy={setSortBy}
-                  clickedItems={clickedItems}
-                  handleAddToCartClick={handleAddToCartClick}
-                   handleRemoveFromCart={handleRemoveFromCart} // Add this
-  setToast={setToast} // Add this
-  updateCartCount={updateCartCount} // Add this
-                />
+               // In UserDashboard.jsx - ensure setToast is passed
+<CategoryProducts
+  selectedCategory={selectedCategory}
+  setSelectedCategory={setSelectedCategory}
+  products={products}
+  productsLoading={productsLoading}
+  showFilters={showFilters}
+  setShowFilters={setShowFilters}
+  minWeight={minWeight}
+  setMinWeight={setMinWeight}
+  maxWeight={maxWeight}
+  setMaxWeight={setMaxWeight}
+  sortBy={sortBy}
+  setSortBy={setSortBy}
+  clickedItems={clickedItems}
+  handleAddToCartClick={handleAddToCartClick}
+  handleRemoveFromCart={handleRemoveFromCart}
+  setToast={setToast} // Make sure this is passed
+  updateCartCount={updateCartCount}
+  
+/>
               )}
             </div>
           )}
 
           {/* My Orders Tab */}
-          {activeTab === "bookings" && (
-            <OrderHistory 
-              myOrders={myOrders} 
-              setActiveTab={setActiveTab} 
-            />
-          )}
+       
+{activeTab === "bookings" && (
+  <OrderHistory 
+    myOrders={myOrders} 
+    setActiveTab={setActiveTab}
+    setSelectedCategory={setSelectedCategory}
+    setCurrentPage={setCurrentPage}
+  />
+)}
         </main>
         <Footer />
       </div>
 
       {/* Cart Modal */}
      
+{/* Cart Modal */}
 <Cart
   showCartModal={showCartModal}
   setShowCartModal={setShowCartModal}
   setActiveTab={setActiveTab}
-  onCartUpdate={fetchCartItemsCount} // Pass the update function
+  onCartUpdate={fetchCartItemsCount}
   onConfirmOrder={confirmOrder}
 />
 

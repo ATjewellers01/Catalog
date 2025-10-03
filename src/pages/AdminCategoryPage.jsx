@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronDown,
   Trash2,
+  Bookmark,
 } from "lucide-react";
 import Footer from "../components/Footer";
 import supabase from "../SupabaseClient";
@@ -34,11 +35,31 @@ const AdminCategoryPage = () => {
   });
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [categories, setCategories] = useState([]); // Add categories state
   
   // Delete mode states
   const [deleteMode, setDeleteMode] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+
+  // Fetch categories to get category IDs
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, category_name')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching categories:', error);
+        return;
+      }
+
+      setCategories(data || []);
+    } catch (err) {
+      console.error('Unexpected error fetching categories:', err);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -47,7 +68,6 @@ const AdminCategoryPage = () => {
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .is("status",null)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -63,10 +83,17 @@ const AdminCategoryPage = () => {
     }
   };
 
-  // Fetch products from Supabase
+  // Fetch products and categories from Supabase
   useEffect(() => {
     fetchProducts();
+    fetchCategories();
   }, []);
+
+  // Get category ID by category name
+  const getCategoryId = (categoryName) => {
+    const category = categories.find(cat => cat.category_name === categoryName);
+    return category ? category.id : null;
+  };
 
   // Delete mode functions
   const toggleProductSelection = (productId, e) => {
@@ -148,6 +175,35 @@ const AdminCategoryPage = () => {
     }
   };
 
+  // Toggle product status between booked and available
+  const toggleProductStatus = async (productId, e) => {
+    if (e) e.stopPropagation();
+    
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+
+    const newStatus = product.status === 'booked' ? null : 'booked';
+    
+    try {
+      const { error } = await supabase
+        .from('products')
+        .update({ status: newStatus })
+        .eq('id', productId);
+
+      if (error) {
+        throw error;
+      }
+
+      // Refresh products to get updated status
+      await fetchProducts();
+      
+      console.log(`Product ${productId} status updated to: ${newStatus}`);
+    } catch (error) {
+      console.error('Error updating product status:', error);
+      alert('Error updating product status. Please try again.');
+    }
+  };
+
   const asset = (name) => {
     if (!name) return 'https://via.placeholder.com/300x300/f3f4f6/9ca3af?text=No+Image';
     if (typeof name !== "string") return 'https://via.placeholder.com/300x300/f3f4f6/9ca3af?text=Invalid+URL';
@@ -223,6 +279,9 @@ const AdminCategoryPage = () => {
         weightNum,
         name: product.product_name || `${selectedCategory} item`,
         category: product.category_name,
+        category_id: product.category_id, // Include category_id
+        status: product.status, // Include status
+        isBooked: product.status === 'booked' // Add isBooked flag
       };
     }).filter(Boolean);
 
@@ -293,12 +352,22 @@ const AdminCategoryPage = () => {
 
       const imageUrl = publicUrlData.publicUrl;
 
+      // Get category ID
+      const categoryId = getCategoryId(selectedCategory);
+
+      if (!categoryId) {
+        alert("Error: Category not found. Please make sure the category exists.");
+        return;
+      }
+
       const { error } = await supabase.from("products").insert([
         {
           category_name: selectedCategory,
+          category_id: categoryId, // Add category ID here
           product_name: "Default",
           product_image_url: imageUrl,
           weight: newPhoto.weight || "",
+          status: null // Default status is available
         },
       ]);
 
@@ -388,6 +457,10 @@ const AdminCategoryPage = () => {
                     </h2>
                     <p className="text-xs text-gray-600 sm:text-sm">
                       Explore our {selectedCategory.toLowerCase()} collection
+                    </p>
+                    {/* Show booked items count */}
+                    <p className="text-xs text-red-600 sm:text-sm">
+                      {galleryItems.filter(item => item.isBooked).length} items marked as Sold Out
                     </p>
                   </div>
                   
@@ -514,97 +587,122 @@ const AdminCategoryPage = () => {
                 </div>
 
                 {/* Items Grid */}
-              <div className="grid grid-cols-1 gap-3 mt-4 sm:gap-4 sm:grid-cols-1 md:grid-cols-3 lg:grid-cols-4">
-  {galleryItems.map((gi) => (
-    <div
-      key={gi.id}
-      onClick={(e) => handleCardClick(gi.id, e)}
-      className={`relative rounded-lg border shadow-md transition-all duration-300 group hover:shadow-lg hover:-translate-y-1 cursor-pointer ${
-        selectedProducts.has(gi.id) 
-          ? 'ring-2 ring-red-500 border-red-300' 
-          : 'border-gray-200'
-      }`}
-    >
-      {/* 👇 Changed here */}
-      <div className="relative h-48 overflow-hidden rounded-lg bg-gray-100"> 
-        {/* Image - Base Layer */}
-        <img
-          src={gi.url || 'https://via.placeholder.com/400x250/f3f4f6/9ca3af?text=No+Image'}
-          alt={gi.desc || 'Product image'}
-          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-          loading="lazy"
-          style={{ zIndex: 1 }}
-          onError={(e) => {
-            console.error('❌ Image failed to load:', gi.url);
-            e.target.src = 'https://via.placeholder.com/400x250/f3f4f6/9ca3af?text=Image+Not+Found';
-            e.target.alt = 'Image not available';
-          }}
-        />
+                <div className="grid grid-cols-1 gap-3 mt-4 sm:gap-4 sm:grid-cols-1 md:grid-cols-3 lg:grid-cols-4">
+                  {galleryItems.map((gi) => (
+                    <div
+                      key={gi.id}
+                      onClick={(e) => handleCardClick(gi.id, e)}
+                      className={`relative rounded-lg border shadow-md transition-all duration-300 group hover:shadow-lg hover:-translate-y-1 cursor-pointer ${
+                        selectedProducts.has(gi.id) 
+                          ? 'ring-2 ring-red-500 border-red-300' 
+                          : 'border-gray-200'
+                      } ${gi.isBooked ? 'opacity-80' : ''}`}
+                    >
+                      <div className="relative h-48 overflow-hidden rounded-lg bg-gray-100"> 
+                        {/* Image - Base Layer */}
+                        <img
+                          src={gi.url || 'https://via.placeholder.com/400x250/f3f4f6/9ca3af?text=No+Image'}
+                          alt={gi.desc || 'Product image'}
+                          className={`absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${
+                            gi.isBooked ? 'filter grayscale' : ''
+                          }`}
+                          loading="lazy"
+                          style={{ zIndex: 1 }}
+                          onError={(e) => {
+                            console.error('❌ Image failed to load:', gi.url);
+                            e.target.src = 'https://via.placeholder.com/400x250/f3f4f6/9ca3af?text=Image+Not+Found';
+                            e.target.alt = 'Image not available';
+                          }}
+                        />
 
-        {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent pointer-events-none" style={{ zIndex: 2 }}></div>
+                        {/* Gradient Overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent pointer-events-none" style={{ zIndex: 2 }}></div>
 
-        {/* Checkbox for delete mode */}
-        {deleteMode && (
-          <div 
-            className="absolute top-2 left-2 z-30"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <input
-              type="checkbox"
-              checked={selectedProducts.has(gi.id)}
-              onChange={(e) => toggleProductSelection(gi.id, e)}
-              className="w-4 h-4 text-red-600 bg-white border-gray-300 rounded focus:ring-red-500 cursor-pointer shadow-lg sm:w-5 sm:h-5"
-            />
-          </div>
-        )}
+                        {/* SOLD OUT Overlay */}
+                        {gi.isBooked && (
+                          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+                            <div className="bg-red-600 text-white px-3 py-2 rounded-lg transform -rotate-12 shadow-lg">
+                              <span className="text-sm font-bold sm:text-base">SOLD OUT</span>
+                            </div>
+                          </div>
+                        )}
 
-        {/* Selection badge */}
-        {deleteMode && selectedProducts.has(gi.id) && (
-          <div className="absolute top-2 right-2 z-30">
-            <div className="bg-red-500 text-white text-xs px-1 py-0.5 rounded-full font-medium shadow-lg sm:px-2 sm:py-1">
-              Selected
-            </div>
-          </div>
-        )}
+                        {/* Status Toggle Button (Admin only) */}
+                        {/* {!deleteMode && (
+                          <button
+                            onClick={(e) => toggleProductStatus(gi.id, e)}
+                            className={`absolute top-2 right-2 z-30 p-1.5 rounded-full transition-all duration-300 ${
+                              gi.isBooked 
+                                ? 'bg-red-500 text-white' 
+                                : 'bg-white/80 text-gray-600 hover:bg-red-500 hover:text-white'
+                            }`}
+                            title={gi.isBooked ? "Mark as Available" : "Mark as Sold Out"}
+                          >
+                            <Bookmark className="w-3 h-3 sm:w-4 sm:h-4" fill={gi.isBooked ? "currentColor" : "none"} />
+                          </button>
+                        )} */}
 
-        {/* Weight badge */}
-        <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 z-20 sm:bottom-2">
-          <div className="px-2 py-0.5 rounded-full backdrop-blur-sm bg-black/60 sm:px-3 sm:py-1">
-            <span className="text-xs font-semibold text-white">
-              {gi.weight ? `${gi.weight}g` : 'No weight'}
-            </span>
-          </div>
-        </div>
+                        {/* Checkbox for delete mode */}
+                        {deleteMode && (
+                          <div 
+                            className="absolute top-2 left-2 z-30"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedProducts.has(gi.id)}
+                              onChange={(e) => toggleProductSelection(gi.id, e)}
+                              className="w-4 h-4 text-red-600 bg-white border-gray-300 rounded focus:ring-red-500 cursor-pointer shadow-lg sm:w-5 sm:h-5"
+                            />
+                          </div>
+                        )}
 
-        {/* Delete mode selection overlay */}
-        {deleteMode && (
-          <div 
-            className={`absolute inset-0 flex items-center justify-center transition-all duration-300 pointer-events-none ${
-              selectedProducts.has(gi.id) 
-                ? 'bg-red-500/30' 
-                : 'bg-black/0 group-hover:bg-black/20'
-            }`}
-            style={{ zIndex: 3 }}
-          >
-            <div className={`text-center p-1 rounded transition-opacity duration-300 ${
-              selectedProducts.has(gi.id) 
-                ? 'bg-red-600 text-white opacity-100' 
-                : 'bg-black/70 text-white opacity-0 group-hover:opacity-100'
-            }`}>
-              <p className="text-xs font-medium">
-                {selectedProducts.has(gi.id) 
-                  ? "✓ Selected" 
-                  : "Tap to select"
-                }
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  ))}
-</div>
+                        {/* Selection badge */}
+                        {deleteMode && selectedProducts.has(gi.id) && (
+                          <div className="absolute top-2 right-2 z-30">
+                            <div className="bg-red-500 text-white text-xs px-1 py-0.5 rounded-full font-medium shadow-lg sm:px-2 sm:py-1">
+                              Selected
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Weight badge */}
+                        <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 z-20 sm:bottom-2">
+                          <div className="px-2 py-0.5 rounded-full backdrop-blur-sm bg-black/60 sm:px-3 sm:py-1">
+                            <span className="text-xs font-semibold text-white">
+                              {gi.weight ? `${gi.weight}g` : 'No weight'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Delete mode selection overlay */}
+                        {deleteMode && (
+                          <div 
+                            className={`absolute inset-0 flex items-center justify-center transition-all duration-300 pointer-events-none ${
+                              selectedProducts.has(gi.id) 
+                                ? 'bg-red-500/30' 
+                                : 'bg-black/0 group-hover:bg-black/20'
+                            }`}
+                            style={{ zIndex: 3 }}
+                          >
+                            <div className={`text-center p-1 rounded transition-opacity duration-300 ${
+                              selectedProducts.has(gi.id) 
+                                ? 'bg-red-600 text-white opacity-100' 
+                                : 'bg-black/70 text-white opacity-0 group-hover:opacity-100'
+                            }`}>
+                              <p className="text-xs font-medium">
+                                {selectedProducts.has(gi.id) 
+                                  ? "✓ Selected" 
+                                  : "Tap to select"
+                                }
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
               </div>
             </div>
@@ -658,6 +756,12 @@ const AdminCategoryPage = () => {
                     disabled
                     className="px-3 py-2 w-full text-sm text-gray-600 bg-gray-100 rounded-lg border border-gray-300 sm:px-4 sm:py-3 sm:text-base sm:rounded-xl"
                   />
+                  {/* Show category ID if available */}
+                  {getCategoryId(selectedCategory) && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Category ID: {getCategoryId(selectedCategory)}
+                    </p>
+                  )}
                 </div>
 
                 <div>

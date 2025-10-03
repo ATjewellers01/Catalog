@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import Subcategories from "./Subcategories";
 import { Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import supabase from "../../SupabaseClient";
 
 const CategoriesTab = ({
@@ -16,17 +15,75 @@ const CategoriesTab = ({
   categoryImages,
   setCategoryImages,
   fetchCategoriesFromSupabase,
+  jewellery = []
 }) => {
   const navigate = useNavigate();
   const [deleteMode, setDeleteMode] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
   const [imageLoadErrors, setImageLoadErrors] = useState(new Set());
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+
+  // Fetch products from Supabase
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setLoadingProducts(true);
+        const { data, error } = await supabase
+          .from('products')
+          .select('*');
+
+        if (error) {
+          console.error('Error fetching products:', error);
+          return;
+        }
+
+        setProducts(data || []);
+      } catch (err) {
+        console.error('Unexpected error fetching products:', err);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
 
   // Reset image errors when categories data changes
   useEffect(() => {
     setImageLoadErrors(new Set());
   }, [categoriesData]);
+
+  // Calculate product counts by status for each category - UPDATED
+  const getCategoryProductCounts = (categoryName) => {
+    const productsToCheck = products.length > 0 ? products : jewellery;
+    
+    const categoryProducts = productsToCheck.filter(item => {
+      const itemCategory = item.category_name || item.category;
+      return itemCategory === categoryName;
+    });
+
+    const pendingCount = categoryProducts.filter(item => 
+      item.status === null || item.status === 'pending'
+    ).length;
+
+    const bookedCount = categoryProducts.filter(item => 
+      item.status === 'booked'
+    ).length;
+
+    const availableCount = categoryProducts.filter(item => 
+      item.status === null || item.status === 'pending' || item.status === 'available'
+    ).length;
+
+    return { pendingCount, bookedCount, availableCount };
+  };
+
+  // Check if category is sold out (no available products)
+  const isCategorySoldOut = (category) => {
+    const { availableCount } = getCategoryProductCounts(category.category_name);
+    return availableCount === 0;
+  };
 
   // Toggle category selection by ID
   const toggleCategorySelection = (categoryId, e) => {
@@ -97,12 +154,13 @@ const CategoriesTab = ({
     setSelectedCategories(new Set());
   };
 
-  // Handle card click - only navigate if not in delete mode
+  // Handle card click - ADMIN CAN CLICK ALL CATEGORIES
   const handleCardClick = (category, e) => {
     if (deleteMode) {
       e.preventDefault();
       toggleCategorySelection(category.id, e);
     } else {
+      // Admin can navigate to any category
       navigate(`/category/${category.category_name}`);
     }
   };
@@ -112,14 +170,141 @@ const CategoriesTab = ({
     setImageLoadErrors(prev => new Set(prev).add(categoryId));
   };
 
-  // Get image source with fallback - FIXED to ensure images load
+  // Get image source with fallback
   const getImageSource = (category) => {
     if (imageLoadErrors.has(category.id)) {
       return asset("download.jpg");
     }
     const coverImage = getCategoryCover(category.category_name);
-    // Ensure we return a valid image URL
     return coverImage || asset("download.jpg");
+  };
+
+  // Show loading if both categories and products are loading
+  if (loadingCategories || loadingProducts) {
+    return (
+      <div className="flex justify-center items-center py-16">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <span className="ml-4 text-gray-600">Loading categories...</span>
+      </div>
+    );
+  }
+
+  // Category card component
+  const CategoryCard = ({ category }) => {
+    const { pendingCount, bookedCount, availableCount } = getCategoryProductCounts(category.category_name);
+    const isSoldOut = availableCount === 0;
+    
+    return (
+      <div
+        onClick={(e) => handleCardClick(category, e)}
+        className={`overflow-hidden relative rounded-xl lg:rounded-2xl border shadow-md transition-all duration-300 group hover:shadow-lg lg:hover:shadow-xl hover:-translate-y-1 cursor-pointer ${
+          selectedCategories.has(category.id) 
+            ? 'ring-2 ring-red-500 border-red-300' 
+            : isSoldOut ? 'border-gray-300 bg-gray-100' : 'border-gray-200'
+        }`}
+      >
+    <div className="relative">
+  {/* Checkbox for delete mode */}
+  {deleteMode && (
+    <div 
+      className="absolute top-2 left-2 lg:top-3 lg:left-3 z-20"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <input
+        type="checkbox"
+        checked={selectedCategories.has(category.id)}
+        onChange={(e) => toggleCategorySelection(category.id, e)}
+        className="w-4 h-4 lg:w-5 lg:h-5 text-red-600 bg-white border-gray-300 rounded focus:ring-red-500 cursor-pointer"
+      />
+    </div>
+  )}
+
+  {/* Selection badge */}
+  {deleteMode && selectedCategories.has(category.id) && (
+    <div className="absolute top-2 left-2 lg:top-3 lg:left-3 z-20">
+      <div className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+        Selected
+      </div>
+    </div>
+  )}
+
+  {/* Booked Count - Top Right */}
+  {bookedCount > 0 && (
+    <div className="absolute top-2 right-2 lg:top-3 lg:right-3 z-20">
+      <div className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+        {bookedCount} Booked
+      </div>
+    </div>
+  )}
+
+  {/* Available Count - Bottom Right */}
+  <div className="absolute bottom-2 right-2 lg:bottom-3 lg:right-3 z-20">
+    <div className={`text-white text-xs px-2 py-1 rounded-full font-medium ${
+      availableCount > 0 ? 'bg-green-500' : 'bg-red-500'
+    }`}>
+      {availableCount} Available
+    </div>
+  </div>
+
+  {/* Sold Out Overlay - Visual only */}
+  {isSoldOut && (
+    <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+      <div className="bg-red-600 text-white px-4 py-2 rounded-lg transform -rotate-12">
+        <span className="text-lg font-bold">SOLD OUT</span>
+      </div>
+    </div>
+  )}
+
+  {/* Image container */}
+  <div className="w-full h-48 sm:h-52 md:h-56 lg:h-60 bg-gray-100 overflow-hidden relative">
+    <img
+      src={getImageSource(category)}
+      alt={category.category_name}
+      className={`object-cover w-full h-full transition-transform duration-500 group-hover:scale-105 ${
+        isSoldOut ? 'filter grayscale opacity-80' : ''
+      }`}
+      onError={() => handleImageError(category.id)}
+      loading="eager"
+      style={{ opacity: 1 }}
+    />
+    
+    {/* Fallback background if image fails to load */}
+    {imageLoadErrors.has(category.id) && (
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
+        <span className="text-gray-500 text-sm font-medium">
+          {category.category_name}
+        </span>
+      </div>
+    )}
+  </div>
+
+  {/* Gradient overlay */}
+  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+  
+  {/* Content */}
+  <div className="absolute right-0 bottom-0 left-0 p-3 lg:p-4 z-10">
+    <div className="flex justify-between items-end">
+      <div>
+        <h3 className="text-base lg:text-lg font-bold text-white mb-1">
+          {category.category_name}
+        </h3>
+        <p className="text-xs text-white/80">
+          {deleteMode ? 
+            (selectedCategories.has(category.id) 
+              ? "✓ Selected for deletion" 
+              : "Tap to select for deletion"
+            ) 
+            : isSoldOut ? 
+              "All items booked" 
+              : `${availableCount} available, ${bookedCount} booked`
+          }
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+      </div>
+    );
   };
 
   return (
@@ -248,97 +433,17 @@ const CategoriesTab = ({
         </div>
       )}
 
-      {loadingCategories ? (
-        <div className="flex justify-center items-center py-16">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-          <span className="ml-4 text-gray-600">Loading categories...</span>
-        </div>
-      ) : !selectedCategory || selectedCategory === "All" ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 px-4 lg:px-0">
-          {categoriesData.map((category) => (
-            <div
-              key={category.id}
-              onClick={(e) => handleCardClick(category, e)}
-              className={`overflow-hidden relative rounded-xl lg:rounded-2xl border border-gray-200 shadow-md transition-all duration-300 group hover:shadow-lg lg:hover:shadow-xl hover:-translate-y-1 cursor-pointer ${
-                selectedCategories.has(category.id) 
-                  ? 'ring-2 ring-red-500 border-red-300' 
-                  : 'border-gray-200'
-              }`}
-            >
-              <div className="relative">
-                {/* Checkbox for delete mode */}
-                {deleteMode && (
-                  <div 
-                    className="absolute top-2 left-2 lg:top-3 lg:left-3 z-20"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedCategories.has(category.id)}
-                      onChange={(e) => toggleCategorySelection(category.id, e)}
-                      className="w-4 h-4 lg:w-5 lg:h-5 text-red-600 bg-white border-gray-300 rounded focus:ring-red-500 cursor-pointer"
-                    />
-                  </div>
-                )}
-
-                {/* Selection badge */}
-                {deleteMode && selectedCategories.has(category.id) && (
-                  <div className="absolute top-2 right-2 lg:top-3 lg:right-3 z-20">
-                    <div className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-medium">
-                      Selected
-                    </div>
-                  </div>
-                )}
-
-                {/* Image container - FIXED: Ensure images always display */}
-                <div className="w-full h-48 sm:h-52 md:h-56 lg:h-60 bg-gray-100 overflow-hidden relative">
-                  <img
-                    src={getImageSource(category)}
-                    alt={category.category_name}
-                    className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-105"
-                    onError={() => handleImageError(category.id)}
-                    loading="eager"
-                    onLoad={(e) => {
-                      e.target.style.opacity = "1";
-                    }}
-                    style={{ opacity: 1 }}
-                  />
-                  
-                  {/* Fallback background if image fails to load */}
-                  {imageLoadErrors.has(category.id) && (
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
-                      <span className="text-gray-500 text-sm font-medium">
-                        {category.category_name}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Gradient overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                
-                {/* Content */}
-                <div className="absolute right-0 bottom-0 left-0 p-3 lg:p-4 z-10">
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <h3 className="text-base lg:text-lg font-bold text-white mb-1">
-                        {category.category_name}
-                      </h3>
-                      <p className="text-xs text-white/80">
-                        {deleteMode ? 
-                          (selectedCategories.has(category.id) 
-                            ? "✓ Selected for deletion" 
-                            : "Tap to select for deletion"
-                          ) 
-                          : "Tap to view collection"
-                        }
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+      {!selectedCategory || selectedCategory === "All" ? (
+        <div className="px-4 lg:px-0">
+          {/* All Categories in Single Grid - Mixed Available and Sold Out */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {categoriesData.map((category) => (
+              <CategoryCard 
+                key={category.id} 
+                category={category}
+              />
+            ))}
+          </div>
         </div>
       ) : (
         <Subcategories

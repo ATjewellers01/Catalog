@@ -1,11 +1,18 @@
 // components/OrderHistory.jsx
 import React, { useState, useEffect } from 'react';
-import { Package, Calendar } from 'lucide-react';
+import { Package, Calendar, ChevronLeft } from 'lucide-react';
 import supabase from '../SupabaseClient';
 
-const OrderHistory = ({ myOrders, setActiveTab }) => {
+const OrderHistory = ({ myOrders, setActiveTab, setSelectedCategory, setCurrentPage }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Back button handler - redirect to Categories
+  const handleBackToCategories = () => {
+    setSelectedCategory("All");
+    setCurrentPage(1);
+    setActiveTab("catalog"); // Switch to catalog tab where categories are shown
+  };
 
   // Fetch orders from the orders table
   const fetchOrders = async () => {
@@ -64,6 +71,17 @@ const OrderHistory = ({ myOrders, setActiveTab }) => {
   if (loading) {
     return (
       <div className="space-y-6">
+        {/* Back Button */}
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleBackToCategories}
+            className="flex items-center space-x-1 text-gray-600 transition-colors hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span className="text-sm font-medium">Back to Categories</span>
+          </button>
+        </div>
+
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-900">Order History</h2>
           <div className="flex items-center space-x-2 text-sm text-gray-600">
@@ -80,6 +98,17 @@ const OrderHistory = ({ myOrders, setActiveTab }) => {
 
   return (
     <div className="space-y-6">
+      {/* Back Button */}
+      <div className="flex items-center space-x-2">
+        <button
+          onClick={handleBackToCategories}
+          className="flex items-center space-x-1 text-gray-600 transition-colors hover:text-gray-900 p-2 rounded-lg hover:bg-gray-100"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          <span className="text-sm font-medium">Back to Categories</span>
+        </button>
+      </div>
+
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">Order History</h2>
         <div className="flex items-center space-x-2 text-sm text-gray-600">
@@ -189,7 +218,7 @@ const OrderCard = ({ order }) => {
       </div>
 
       {/* Order Summary */}
-      <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4 pt-4 border-t border-gray-200">
+      <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3 pt-4 border-t border-gray-200">
         <div>
           <p className="text-gray-500">Total Items</p>
           <p className="font-medium text-gray-900">{order.total_item}</p>
@@ -203,10 +232,6 @@ const OrderCard = ({ order }) => {
           <p className="font-medium text-gray-900">
             {new Date(order.created_at).toLocaleDateString()}
           </p>
-        </div>
-        <div>
-          <p className="text-gray-500">Total Amount</p>
-          <p className="font-medium text-amber-600">₹{calculateTotalOrderPrice()}</p>
         </div>
       </div>
 
@@ -230,11 +255,6 @@ const OrderCard = ({ order }) => {
             <span className="text-xs text-gray-500">
               Order completed on {new Date(order.created_at).toLocaleDateString()}
             </span>
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-semibold text-gray-900">
-              Order Total: ₹{calculateTotalOrderPrice()}
-            </p>
           </div>
         </div>
       </div>

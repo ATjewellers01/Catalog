@@ -1,4 +1,3 @@
-// components/CategoryProducts.jsx
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, Filter, ShoppingCart, Package, Trash2 } from 'lucide-react';
 import supabase from '../SupabaseClient';
@@ -18,10 +17,8 @@ const CategoryProducts = ({
   setSortBy,
   clickedItems,
   handleAddToCartClick,
-   handleRemoveFromCart, // Add this prop
-  setToast, // Add this prop
-  updateCartCount // Add this prop
-  
+  handleRemoveFromCart, // Add this prop
+ 
 }) => {
   const [addingToCart, setAddingToCart] = useState({});
   const [removingFromCart, setRemovingFromCart] = useState({});
@@ -55,8 +52,7 @@ const CategoryProducts = ({
 
   // Check if product is in cart
   const isProductInCart = (productId) => {
-   return cartItems.some(item => String(item.product_id) === String(productId));
-
+    return cartItems.some(item => String(item.product_id) === String(productId));
   };
 
   // Get cart item for product
@@ -101,22 +97,43 @@ const CategoryProducts = ({
     }
   };
 
-  const handleAddToCart = async (product) => {
+  // Updated handleAddToCart with event prevention
+  const handleAddToCart = async (product, event) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
+    // Prevent multiple clicks
+    if (addingToCart[product.id]) {
+      return;
+    }
+
     setAddingToCart(prev => ({ ...prev, [product.id]: true }));
     try {
       await handleAddToCartClick({
         id: product.id,
         name: product.product_name,
         category_name: product.category_name
-      });
+      }, event);
       await fetchCartItems(); // Refresh cart items after adding
     } finally {
       setAddingToCart(prev => ({ ...prev, [product.id]: false }));
     }
   };
 
+  // Updated handleRemoveClick with event prevention
+  const handleRemoveClick = async (product, event) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
+    // Prevent multiple clicks
+    if (removingFromCart[product.id]) {
+      return;
+    }
 
-  const handleRemoveClick = async (product) => {
     setRemovingFromCart(prev => ({ ...prev, [product.id]: true }));
     try {
       await handleRemoveFromCart(product.id);
@@ -233,16 +250,16 @@ const CategoryProducts = ({
               }
             })
             .map((product) => (
-            <ProductCard
-    key={product.id}
-    product={product}
-    clickedItems={clickedItems}
-    onAddToCart={handleAddToCart}
-    onRemoveFromCart={handleRemoveClick} // Use the new function
-    addingToCart={addingToCart[product.id] || false}
-    removingFromCart={removingFromCart[product.id] || false}
-    isInCart={isProductInCart(product.id)}
-  />
+              <ProductCard
+                key={product.id}
+                product={product}
+                clickedItems={clickedItems}
+                onAddToCart={handleAddToCart}
+                onRemoveFromCart={handleRemoveClick}
+                addingToCart={addingToCart[product.id] || false}
+                removingFromCart={removingFromCart[product.id] || false}
+                isInCart={isProductInCart(product.id)}
+              />
             ))}
         </div>
       )}
@@ -274,9 +291,11 @@ const ProductCard = ({
       className={`overflow-hidden relative rounded-2xl border shadow-md group hover:shadow-xl hover:-translate-y-1 transition-transform duration-300 ${
         isInCart ? "bg-green-100 border-green-400" : "bg-white border-gray-200"
       }`}
-      onDoubleClick={() => {
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
         if (isInCart) {
-          onRemoveFromCart(product);
+          onRemoveFromCart(product, e);
         }
       }}
     >
@@ -297,34 +316,34 @@ const ProductCard = ({
 
         {/* Cart Button */}
         <div className="flex justify-between items-center mt-2">
-  <div className="flex items-center text-white font-semibold px-6 space-x-3 bg-black/40 backdrop-blur-sm rounded-full py-2">
-    view
-  </div>
+          <div className="flex items-center text-white font-semibold px-6 space-x-3 bg-black/40 backdrop-blur-sm rounded-full py-2">
+            view
+          </div>
 
-<button
-  onClick={(e) => {
-    e.stopPropagation();
-    if (isInCart) {
-      onRemoveFromCart(product); // This should be the product object
-    } else {
-      onAddToCart(product);
-    }
-  }}
-  disabled={addingToCart || removingFromCart}
-  className={`p-2 rounded-full text-white shadow-lg border border-white/20 transition-transform hover:scale-110 active:scale-95 ${
-    isInCart
-      ? "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-      : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
-  }`}
->
-  {(addingToCart || removingFromCart) ? (
-    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-  ) : (
-    <ShoppingCart className="w-5 h-5" />
-  )}
-</button>
-</div>
-
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (isInCart) {
+                onRemoveFromCart(product, e);
+              } else {
+                onAddToCart(product, e);
+              }
+            }}
+            disabled={addingToCart || removingFromCart}
+            className={`p-2 rounded-full text-white shadow-lg border border-white/20 transition-transform hover:scale-110 active:scale-95 ${
+              isInCart
+                ? "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
+            }`}
+          >
+            {(addingToCart || removingFromCart) ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <ShoppingCart className="w-5 h-5" />
+            )}
+          </button>
+        </div>
 
         {/* Weight Badge */}
         {product.weight && (
@@ -332,12 +351,9 @@ const ProductCard = ({
             {parseFloat(String(product.weight).replace("g", "")).toFixed(2)} g
           </div>
         )}
-
-       
       </div>
     </div>
   );
 };
-
 
 export default CategoryProducts;

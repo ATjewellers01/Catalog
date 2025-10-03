@@ -66,31 +66,35 @@ const Cart = ({
     }
   };
 
-  // Remove item from cart
-  const removeFromCart = async (cartItemId) => {
-    try {
-      setRemovingFromCart(prev => ({ ...prev, [cartItemId]: true }));
+// In Cart.jsx - update removeFromCart function
+const removeFromCart = async (cartItemId) => {
+  try {
+    setRemovingFromCart(prev => ({ ...prev, [cartItemId]: true }));
 
-      const { error } = await supabase
-        .from('cart_item')
-        .delete()
-        .eq('id', cartItemId);
+    const { error } = await supabase
+      .from('cart_item')
+      .delete()
+      .eq('id', cartItemId);
 
-      if (error) {
-        console.error('Error removing from cart:', error);
-        return false;
-      }
-      
-      setCartItems(prev => prev.filter(item => item.id !== cartItemId));
-      if (onCartUpdate) onCartUpdate();
-      return true;
-    } catch (error) {
-      console.error('Error in removeFromCart:', error);
+    if (error) {
+      console.error('Error removing from cart:', error);
       return false;
-    } finally {
-      setRemovingFromCart(prev => ({ ...prev, [cartItemId]: false }));
     }
-  };
+    
+    setCartItems(prev => prev.filter(item => item.id !== cartItemId));
+    if (onCartUpdate) onCartUpdate();
+    
+    // Don't show toast here - let the CategoryProducts handle it
+    return true;
+  } catch (error) {
+    console.error('Error in removeFromCart:', error);
+    return false;
+  } finally {
+    setRemovingFromCart(prev => ({ ...prev, [cartItemId]: false }));
+  }
+};
+
+
 
   // Clear cart function
   const clearCart = async () => {
@@ -289,12 +293,12 @@ const CartSummary = ({
         <span className="font-medium text-amber-600">{getCartTotalWeight()}g</span>
       </div>
      
-      <div className="pt-2 border-t border-amber-200">
+      {/* <div className="pt-2 border-t border-amber-200">
         <div className="flex justify-between text-lg font-bold text-gray-900">
           <span>Grand Total:</span>
           <span>₹{getCartTotalPrice().toLocaleString()}</span>
         </div>
-      </div>
+      </div> */}
     </div>
 
     <div className="flex gap-3">

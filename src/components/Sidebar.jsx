@@ -1,6 +1,6 @@
 // components/Sidebar.jsx
 import React from 'react';
-import { Package, History, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, History, LogOut, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 
 const Sidebar = ({
   activeTab,
@@ -26,17 +26,28 @@ const Sidebar = ({
   return (
     <>
       {/* Mobile Overlay */}
-      {sidebarOpen && (
+      {sidebarOpen && isMobile && (
         <div
           className="fixed inset-0 z-[60] bg-black bg-opacity-50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
+      {/* Mobile Menu Toggle Button - Always visible on mobile when sidebar is closed */}
+      {isMobile && !sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="fixed top-4 left-4 z-50 p-3 bg-white rounded-xl shadow-lg border border-gray-200 transition-all hover:bg-gray-50 lg:hidden ios-touch-target"
+          title="Open Menu"
+        >
+          <Menu className="w-5 h-5 text-gray-700" />
+        </button>
+      )}
+
       {/* Sidebar */}
       <div
         className={`flex fixed top-0 left-0 z-[70] bg-white flex-col justify-between w-full sm:w-[85vw] sm:max-w-xs border-r border-gray-200 shadow-xl lg:z-40 lg:shadow-none lg:w-72 lg:max-w-none lg:translate-x-0 lg:flex-shrink-0 overflow-y-auto overflow-x-hidden scrollbar-hide transform transition-transform duration-300 ease-in-out ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
         style={{
           height: "100dvh",
@@ -50,12 +61,14 @@ const Sidebar = ({
               <h1 className="text-xl font-bold text-gray-900">AT Jeweller</h1>
               <p className="text-sm text-gray-500">Dashboard</p>
             </div>
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-lg transition-colors hover:bg-gray-100 lg:hidden ios-touch-target"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
+            {isMobile && (
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="p-2 rounded-lg transition-colors hover:bg-gray-100 lg:hidden ios-touch-target"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -100,11 +113,11 @@ const Sidebar = ({
         </div>
       </div>
 
-      {/* Sidebar Toggle Button (when sidebar is hidden) */}
-      {!sidebarOpen && (
+      {/* Desktop Collapsed Sidebar (when sidebar is hidden on desktop) */}
+      {!sidebarOpen && !isMobile && (
         <div className="hidden flex-col items-center py-4 w-16 bg-white border-r border-gray-200 shadow-xl lg:flex lg:w-72 lg:max-w-none lg:translate-x-0 lg:flex-shrink-0">
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            onClick={() => setSidebarOpen(true)}
             className="p-2 mb-4 rounded-lg transition-colors hover:bg-gray-100 ios-touch-target"
             title="Show Sidebar"
           >
