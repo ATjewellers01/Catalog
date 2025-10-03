@@ -163,23 +163,23 @@ const fetchCategories = async () => {
     // Check which categories have products
     const categoriesWithProducts = await Promise.all(
       categoriesData.map(async (category) => {
-        const categoryId = category.id ;
+        const categoryName = category.category_name ;
         
         // Check if this category has any products
         const { data: productsData, error: productsError } = await supabase
           .from("products")
           .select("id", { count: 'exact' })
-          .eq("category_id", categoryId)
+          .eq("category_name", categoryName)
           .is("status", null);
 
         if (productsError) {
-          console.error(`Error checking products for category ${categoryId}:`, productsError);
+          console.error(`Error checking products for category ${categoryName}:`, productsError);
           return { ...category, hasProducts: false };
         }
 
         // Return category with hasProducts flag
         const hasProducts = (productsData && productsData.length > 0);
-        console.log(`Category ${categoryId} has products:`, hasProducts);
+        console.log(`Category ${categoryName} has products:`, hasProducts);
         
         return {
           ...category,
@@ -202,39 +202,39 @@ const fetchCategories = async () => {
    // fetchCartItemsCount(); // Fetch cart count on component mount
   }, []);
 
-  // Fetch products by category
-  const fetchProductsByCategory = async (categoryId) => {
-    setProductsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .eq("category_id", categoryId)
-      .is("status",null)
-        .order("created_at", { ascending: false });
+// Fetch products by category - FIXED
+const fetchProductsByCategory = async (categoryName) => {
+  setProductsLoading(true);
+  try {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("category_name", categoryName) // Use the parameter directly
+      .is("status", null)
+      .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Error fetching products:", error.message);
-        setProducts([]);
-      } else {
-        console.log("Fetched products successfully:", data);
-        setProducts(data);
-      }
-    } catch (error) {
-      console.error("Error in fetchProductsByCategory:", error);
+    if (error) {
+      console.error("Error fetching products:", error.message);
       setProducts([]);
-    }
-    setProductsLoading(false);
-  };
-
-  // Fetch products when category changes
-  useEffect(() => {
-    if (selectedCategory !== "All") {
-      fetchProductsByCategory(categories.id);
     } else {
-      setProducts([]);
+      console.log(`Fetched products for ${categoryName}:`, data);
+      setProducts(data);
     }
-  }, [selectedCategory]);
+  } catch (error) {
+    console.error("Error in fetchProductsByCategory:", error);
+    setProducts([]);
+  }
+  setProductsLoading(false);
+};
+
+// Fetch products when category changes - FIXED
+useEffect(() => {
+  if (selectedCategory !== "All") {
+    fetchProductsByCategory(selectedCategory); // Pass the selected category
+  } else {
+    setProducts([]);
+  }
+}, [selectedCategory]);
 
   // Update cart count when cart modal opens/closes
   useEffect(() => {
@@ -692,82 +692,93 @@ const confirmOrder = async () => {
     return `${cleanBase}/${clean}`;
   };
 
-// CategoriesGallery Component (updated with sold out badge)
-const CategoriesGallery = () => (
-  <div className="space-y-4">
-    <h2 className="mt-4 text-2xl font-bold text-gray-900">Categories</h2>
-    <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {Array.isArray(categories) && categories.length > 0 ? (
-        categories.map((category) => {
-          const categoryName = category.name || category.category_name || category.title;
-          const imageUrl = category.image_url || category.image || category.cover_image || asset("download.jpg");
-          const hasProducts = category.hasProducts !== false; // Default to true if not specified
-          
-          return (
-            <div
-              key={category.id || categoryName}
-              onClick={() => {
-                if (hasProducts) {
-                  setSelectedCategory(categoryName);
-                  setCurrentPage(1);
-                }
-              }}
-              className={`overflow-hidden relative z-10 rounded-2xl border shadow-md transition-all duration-300 group ${
-                hasProducts 
-                  ? "cursor-pointer border-gray-200 hover:shadow-xl hover:-translate-y-1" 
-                  : "cursor-not-allowed border-gray-300 opacity-70"
-              }`}
-            >
-              <div className="relative">
-                <img
-                  src={imageUrl}
-                  alt={categoryName}
-                  className={`object-cover w-full h-56 transition-transform duration-500 sm:h-52 md:h-60 ${
-                    hasProducts ? "group-hover:scale-105" : ""
-                  }`}
-                />
-                
-                {/* Sold Out Badge - Top Right Corner */}
-                {!hasProducts && (
-                  <div className="absolute top-3 right-3 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-lg shadow-lg z-10">
-                    SOLD OUT
-                  </div>
-                )}
-                
-                <div className={`absolute inset-0 bg-gradient-to-t to-transparent ${
-                  hasProducts ? "from-black/60 via-black/10" : "from-gray-500/70 via-gray-400/30"
-                }`} />
-                
-                <div className="absolute right-0 bottom-0 left-0 p-4">
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <h3 className={`text-lg font-bold ${
-                        hasProducts ? "text-white" : "text-gray-300"
-                      }`}>
-                        {categoryName}
-                      </h3>
-                      <p className={`text-xs ${
-                        hasProducts ? "text-white/80" : "text-gray-400"
-                      }`}>
-                        {hasProducts ? "Tap to view products" : "No products available"}
-                      </p>
+// CategoriesGallery Component (improved with better debugging)
+const CategoriesGallery = () => {
+  console.log("CategoriesGallery rendering, categories:", categories);
+  
+  return (
+    <div className="space-y-4">
+      <h2 className="mt-4 text-2xl font-bold text-gray-900">Categories</h2>
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {Array.isArray(categories) && categories.length > 0 ? (
+          categories.map((category) => {
+            const categoryName = category.category_name || category.name || category.title;
+            const imageUrl = category.image_url || category.image || category.cover_image || asset("download.jpg");
+            const hasProducts = category.hasProducts !== false;
+            
+            console.log(`Category: ${categoryName}, hasProducts: ${hasProducts}`);
+            
+            return (
+              <div
+                key={category.id || categoryName}
+                onClick={() => {
+                  if (hasProducts) {
+                    console.log(`Selected category: ${categoryName}`);
+                    setSelectedCategory(categoryName);
+                    setCurrentPage(1);
+                  }
+                }}
+                className={`overflow-hidden relative z-10 rounded-2xl border shadow-md transition-all duration-300 group ${
+                  hasProducts 
+                    ? "cursor-pointer border-gray-200 hover:shadow-xl hover:-translate-y-1" 
+                    : "cursor-not-allowed border-gray-300 opacity-70"
+                }`}
+              >
+                <div className="relative">
+                  <img
+                    src={imageUrl}
+                    alt={categoryName}
+                    className={`object-cover w-full h-56 transition-transform duration-500 sm:h-52 md:h-60 ${
+                      hasProducts ? "group-hover:scale-105" : ""
+                    }`}
+                    onError={(e) => {
+                      console.error(`Image failed to load for ${categoryName}:`, imageUrl);
+                      e.target.src = 'https://via.placeholder.com/300x200/f3f4f6/9ca3af?text=No+Image';
+                    }}
+                  />
+                  
+                  {/* Sold Out Badge - Top Right Corner */}
+                  {!hasProducts && (
+                    <div className="absolute top-3 right-3 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-lg shadow-lg z-10">
+                      SOLD OUT
+                    </div>
+                  )}
+                  
+                  <div className={`absolute inset-0 bg-gradient-to-t to-transparent ${
+                    hasProducts ? "from-black/60 via-black/10" : "from-gray-500/70 via-gray-400/30"
+                  }`} />
+                  
+                  <div className="absolute right-0 bottom-0 left-0 p-4">
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <h3 className={`text-lg font-bold ${
+                          hasProducts ? "text-white" : "text-gray-300"
+                        }`}>
+                          {categoryName}
+                        </h3>
+                        <p className={`text-xs ${
+                          hasProducts ? "text-white/80" : "text-gray-400"
+                        }`}>
+                          {hasProducts ? "Tap to view products" : "No products available"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          );
-        })
-      ) : (
-        <div className="col-span-full py-8 text-center">
-          <p className="text-gray-500">
-            {loading ? "Loading categories..." : "No categories available"}
-          </p>
-        </div>
-      )}
+            );
+          })
+        ) : (
+          <div className="col-span-full py-8 text-center">
+            <p className="text-gray-500">
+              {loading ? "Loading categories..." : "No categories available"}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
   // TopBar Component (merged) - FIXED: using cartItemsCount instead of cart
   const TopBar = () => (

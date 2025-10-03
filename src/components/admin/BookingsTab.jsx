@@ -13,13 +13,13 @@ const BookingsTab = ({
           User Bookings (Orders)
         </h2>
         <div className="flex items-center space-x-2 sm:space-x-3">
-          <button
+          {/* <button
             onClick={handleViewHistory}
             className="flex items-center px-3 py-2 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg shadow-sm transition-all hover:bg-gray-200 hover:shadow-md"
           >
             <History className="w-4 h-4" />
             <span className="ml-2 text-sm font-medium">History</span>
-          </button>
+          </button> */}
         </div>
       </div>
       <div className="p-3 sm:p-6">
