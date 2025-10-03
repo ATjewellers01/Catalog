@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Filter, ShoppingCart, Package, Trash2 } from 'lucide-react';
+import { ChevronLeft, Filter, ShoppingCart, Package, Trash2, X } from 'lucide-react';
 import supabase from '../SupabaseClient';
 
 const CategoryProducts = ({
@@ -23,6 +23,7 @@ const CategoryProducts = ({
   const [addingToCart, setAddingToCart] = useState({});
   const [removingFromCart, setRemovingFromCart] = useState({});
   const [cartItems, setCartItems] = useState([]);
+  const [selectedImage, setSelectedImage] = useState(null); // State for full image view
 
   // Fetch user's cart items
   const fetchCartItems = async () => {
@@ -143,6 +144,39 @@ const CategoryProducts = ({
     }
   };
 
+  // Handle view image click
+  const handleViewImage = (product, event) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    setSelectedImage(product);
+  };
+
+  // Handle close full image view
+  const handleCloseImage = () => {
+    setSelectedImage(null);
+  };
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        handleCloseImage();
+      }
+    };
+
+    if (selectedImage) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [selectedImage]);
+
   // Fetch cart items on component mount
   useEffect(() => {
     fetchCartItems();
@@ -150,6 +184,58 @@ const CategoryProducts = ({
 
   return (
     <div className="space-y-6">
+      {/* Full Image Modal */}
+      {selectedImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm">
+          <div className="relative max-w-4xl max-h-[90vh] w-full mx-4">
+            {/* Close Button */}
+            <button
+              onClick={handleCloseImage}
+              className="absolute -top-12 right-0 z-10 p-2 text-white hover:text-amber-300 transition-colors"
+              aria-label="Close image"
+            >
+              <X className="w-8 h-8" />
+            </button>
+            
+            {/* Back Button */}
+            <button
+              onClick={handleCloseImage}
+              className="absolute -top-12 left-0 z-10 flex items-center space-x-2 p-2 text-white hover:text-amber-300 transition-colors"
+              aria-label="Go back"
+            >
+              <ChevronLeft className="w-6 h-6" />
+              <span className="text-lg font-medium">Back</span>
+            </button>
+
+            {/* Image Container */}
+            <div className="relative rounded-2xl overflow-hidden bg-white">
+              <img
+                src={selectedImage.product_image_url || selectedImage.image || "https://via.placeholder.com/300x300?text=No+Image"}
+                alt={selectedImage.product_name}
+                className="w-full h-auto max-h-[80vh] object-contain"
+              />
+              
+              {/* Product Info Overlay */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
+                <h3 className="text-white font-bold text-2xl mb-2">
+                  {selectedImage.product_name}
+                </h3>
+                {selectedImage.description && (
+                  <p className="text-white/90 text-lg mb-3">
+                    {selectedImage.description}
+                  </p>
+                )}
+                {selectedImage.weight && (
+                  <div className="inline-flex items-center px-4 py-2 rounded-full bg-black/60 text-white text-lg font-semibold backdrop-blur-sm">
+                    {parseFloat(String(selectedImage.weight).replace("g", "")).toFixed(2)} g
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Filter & Sort Bar */}
       <div className="fixed top-16 left-0 right-0 z-40 p-3 border-b border-gray-200 shadow-md backdrop-blur-sm bg-white/95 md:sticky md:top-4 md:p-6 md:rounded-2xl md:border-2 md:shadow-xl md:bg-white md:border-amber-200 md:mb-8">
         <div className="flex flex-wrap gap-2 justify-between items-center md:gap-4">
@@ -256,6 +342,7 @@ const CategoryProducts = ({
                 clickedItems={clickedItems}
                 onAddToCart={handleAddToCart}
                 onRemoveFromCart={handleRemoveClick}
+                onViewImage={handleViewImage}
                 addingToCart={addingToCart[product.id] || false}
                 removingFromCart={removingFromCart[product.id] || false}
                 isInCart={isProductInCart(product.id)}
@@ -280,6 +367,7 @@ const ProductCard = ({
   clickedItems, 
   onAddToCart, 
   onRemoveFromCart,
+  onViewImage,
   addingToCart, 
   removingFromCart,
   isInCart 
@@ -316,9 +404,12 @@ const ProductCard = ({
 
         {/* Cart Button */}
         <div className="flex justify-between items-center mt-2">
-          <div className="flex items-center text-white font-semibold px-6 space-x-3 bg-black/40 backdrop-blur-sm rounded-full py-2">
+          <button
+            onClick={(e) => onViewImage(product, e)}
+            className="flex items-center text-white font-semibold px-6 space-x-3 bg-black/40 backdrop-blur-sm rounded-full py-2 hover:bg-black/60 transition-colors"
+          >
             view
-          </div>
+          </button>
 
           <button
             onClick={(e) => {
