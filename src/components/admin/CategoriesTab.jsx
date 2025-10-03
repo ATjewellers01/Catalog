@@ -250,7 +250,7 @@ const CategoriesTab = ({
   {isSoldOut && (
     <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
       <div className="bg-red-600 text-white px-4 py-2 rounded-lg transform -rotate-12">
-        <span className="text-lg font-bold">SOLD OUT</span>
+        <span className="text-lg font-bold">EMPTY</span>
       </div>
     </div>
   )}
