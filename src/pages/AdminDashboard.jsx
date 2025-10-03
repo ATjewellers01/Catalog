@@ -628,25 +628,27 @@ const handleDownloadOrderPDF = async (order) => {
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
+const fetchUsers = async () => {
+  try {
+    setLoading(true);
 
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .not("user_name", "is", null) // exclude null user_name
+      .order("created_at", { ascending: false });
 
-      if (error) throw error;
+    if (error) throw error;
 
-      setUsers(data || []);
-    } catch (err) {
-      console.error("Error fetching users:", err);
-      setUsers([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setUsers(data || []);
+  } catch (err) {
+    console.error("Error fetching users:", err);
+    setUsers([]);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   // Fetch users on component mount
   useEffect(() => {

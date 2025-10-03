@@ -867,7 +867,7 @@ const OrderSuccessModal = () => {
             ) : (
               <X className="flex-shrink-0 w-4 h-4 text-red-600 sm:w-5 sm:h-5" />
             )}
-            <p className="flex-1 text-xs font-medium sm:text-sm sm:text-base">
+            <p className="flex-1 text-xs font-medium  sm:text-base">
               {toast.message}
             </p>
           </div>
