@@ -138,7 +138,8 @@ const fetchCartItemsCount = async () => {
   }
 };
 
-// Fetch categories with product count
+
+// Fetch categories with product count - UPDATED to filter out sold out categories
 const fetchCategories = async () => {
   setLoading(true);
   try {
@@ -160,36 +161,43 @@ const fetchCategories = async () => {
 
     console.log("Fetched categories successfully", categoriesData);
 
-    // Check which categories have products
+    // Check which categories have products and filter out sold out ones
     const categoriesWithProducts = await Promise.all(
       categoriesData.map(async (category) => {
-        const categoryName = category.category_name ;
+        const categoryName = category.category_name;
         
-        // Check if this category has any products
+        // Check if this category has any available products
         const { data: productsData, error: productsError } = await supabase
           .from("products")
           .select("id", { count: 'exact' })
           .eq("category_name", categoryName)
-          .is("status", null);
+          .is("status", null); // Only count products that are not booked
 
         if (productsError) {
           console.error(`Error checking products for category ${categoryName}:`, productsError);
-          return { ...category, hasProducts: false };
+          return null; // Return null for categories with errors
         }
 
-        // Return category with hasProducts flag
+        // Return category only if it has available products
         const hasProducts = (productsData && productsData.length > 0);
-        console.log(`Category ${categoryName} has products:`, hasProducts);
+        console.log(`Category ${categoryName} has available products:`, hasProducts);
         
-        return {
-          ...category,
-          hasProducts: hasProducts
-        };
+        if (hasProducts) {
+          return {
+            ...category,
+            hasProducts: true
+          };
+        } else {
+          return null; // Filter out categories with no available products
+        }
       })
     );
 
-    console.log("Categories with product info:", categoriesWithProducts);
-    setCategories(categoriesWithProducts);
+    // Filter out null values (sold out categories)
+    const availableCategories = categoriesWithProducts.filter(category => category !== null);
+    
+    console.log("Available categories:", availableCategories);
+    setCategories(availableCategories);
 
   } catch (error) {
     console.error("Error in fetchCategories:", error);
@@ -693,8 +701,9 @@ const confirmOrder = async () => {
   };
 
 // CategoriesGallery Component (improved with better debugging)
+// CategoriesGallery Component - Only shows categories with available products
 const CategoriesGallery = () => {
-  console.log("CategoriesGallery rendering, categories:", categories);
+  console.log("CategoriesGallery rendering, available categories:", categories);
   
   return (
     <div className="space-y-4">
@@ -704,62 +713,40 @@ const CategoriesGallery = () => {
           categories.map((category) => {
             const categoryName = category.category_name || category.name || category.title;
             const imageUrl = category.image_url || category.image || category.cover_image || asset("download.jpg");
-            const hasProducts = category.hasProducts !== false;
             
-            console.log(`Category: ${categoryName}, hasProducts: ${hasProducts}`);
+            console.log(`Rendering available category: ${categoryName}`);
             
             return (
               <div
                 key={category.id || categoryName}
                 onClick={() => {
-                  if (hasProducts) {
-                    console.log(`Selected category: ${categoryName}`);
-                    setSelectedCategory(categoryName);
-                    setCurrentPage(1);
-                  }
+                  console.log(`Selected category: ${categoryName}`);
+                  setSelectedCategory(categoryName);
+                  setCurrentPage(1);
                 }}
-                className={`overflow-hidden relative z-10 rounded-2xl border shadow-md transition-all duration-300 group ${
-                  hasProducts 
-                    ? "cursor-pointer border-gray-200 hover:shadow-xl hover:-translate-y-1" 
-                    : "cursor-not-allowed border-gray-300 opacity-70"
-                }`}
+                className="overflow-hidden relative z-10 rounded-2xl border border-gray-200 shadow-md transition-all duration-300 group cursor-pointer hover:shadow-xl hover:-translate-y-1"
               >
                 <div className="relative">
                   <img
                     src={imageUrl}
                     alt={categoryName}
-                    className={`object-cover w-full h-56 transition-transform duration-500 sm:h-52 md:h-60 ${
-                      hasProducts ? "group-hover:scale-105" : ""
-                    }`}
+                    className="object-cover w-full h-56 transition-transform duration-500 sm:h-52 md:h-60 group-hover:scale-105"
                     onError={(e) => {
                       console.error(`Image failed to load for ${categoryName}:`, imageUrl);
                       e.target.src = 'https://via.placeholder.com/300x200/f3f4f6/9ca3af?text=No+Image';
                     }}
                   />
                   
-                  {/* Sold Out Badge - Top Right Corner */}
-                  {!hasProducts && (
-                    <div className="absolute top-3 right-3 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-lg shadow-lg z-10">
-                      SOLD OUT
-                    </div>
-                  )}
-                  
-                  <div className={`absolute inset-0 bg-gradient-to-t to-transparent ${
-                    hasProducts ? "from-black/60 via-black/10" : "from-gray-500/70 via-gray-400/30"
-                  }`} />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
                   
                   <div className="absolute right-0 bottom-0 left-0 p-4">
                     <div className="flex justify-between items-end">
                       <div>
-                        <h3 className={`text-lg font-bold ${
-                          hasProducts ? "text-white" : "text-gray-300"
-                        }`}>
+                        <h3 className="text-lg font-bold text-white">
                           {categoryName}
                         </h3>
-                        <p className={`text-xs ${
-                          hasProducts ? "text-white/80" : "text-gray-400"
-                        }`}>
-                          {hasProducts ? "Tap to view products" : "No products available"}
+                        <p className="text-xs text-white/80">
+                          Tap to view products
                         </p>
                       </div>
                     </div>
@@ -771,8 +758,13 @@ const CategoriesGallery = () => {
         ) : (
           <div className="col-span-full py-8 text-center">
             <p className="text-gray-500">
-              {loading ? "Loading categories..." : "No categories available"}
+              {loading ? "Loading categories..." : "No categories available at the moment"}
             </p>
+            {!loading && (
+              <p className="text-sm text-gray-400 mt-2">
+                All items are currently sold out. Please check back later.
+              </p>
+            )}
           </div>
         )}
       </div>
