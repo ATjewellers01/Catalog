@@ -17,16 +17,16 @@ const AddCategoryModal = ({
   useEffect(() => {
     const fetchCategories = async () => {
       const { data, error } = await supabase
-        .from("users")
-        .select("category")
-        .not("category", "is", null);
+        .from("dropdown")
+        .select("category_name")
+        .not("category_name", "is", null);
 
       if (error) {
         console.error("Error fetching categories:", error);
         return;
       }
 
-      const uniqueCategories = [...new Set(data.map((row) => row.category))];
+      const uniqueCategories = [...new Set(data.map((row) => row.category_name))];
       setCategories(uniqueCategories);
     };
 

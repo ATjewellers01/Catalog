@@ -31,6 +31,7 @@ const AdminCategoryPage = () => {
     subcategory: "",
     description: "",
     weight: "",
+    melting: "", // Add melting field
     image: "",
   });
   const [products, setProducts] = useState([]);
@@ -41,6 +42,9 @@ const AdminCategoryPage = () => {
   const [deleteMode, setDeleteMode] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+
+  // Predefined melting options
+  const meltingOptions = ["92", "84", "75"];
 
   // Fetch categories to get category IDs
   const fetchCategories = async () => {
@@ -261,7 +265,8 @@ const AdminCategoryPage = () => {
         const searchableText = [
           product.description,
           product.product_name,
-          product.category_name
+          product.category_name,
+          product.melting // Include melting in search
         ]
           .filter(Boolean)
           .join(' ')
@@ -281,7 +286,8 @@ const AdminCategoryPage = () => {
         category: product.category_name,
         category_id: product.category_id, // Include category_id
         status: product.status, // Include status
-        isBooked: product.status === 'booked' // Add isBooked flag
+        isBooked: product.status === 'booked', // Add isBooked flag
+        melting: product.melting || "" // Include melting
       };
     }).filter(Boolean);
 
@@ -315,7 +321,7 @@ const AdminCategoryPage = () => {
   };
 
   const resetPhotoForm = () => {
-    setNewPhoto({ subcategory: "", description: "", weight: "", image: "" });
+    setNewPhoto({ subcategory: "", description: "", weight: "", melting: "", image: "" });
     setPhotoPreview("");
     setShowAddPhotoModal(false);
   };
@@ -364,9 +370,10 @@ const AdminCategoryPage = () => {
         {
           category_name: selectedCategory,
           category_id: categoryId, // Add category ID here
-          product_name: "Default",
+          product_name: selectedCategory,
           product_image_url: imageUrl,
           weight: newPhoto.weight || "",
+          melting: newPhoto.melting || "", // Add melting field
           status: null // Default status is available
         },
       ]);
@@ -675,6 +682,17 @@ const AdminCategoryPage = () => {
                           </div>
                         </div>
 
+                        {/* Melting badge - if available */}
+                        {gi.melting && (
+                          <div className="absolute top-2 left-2 z-20">
+                            <div className="px-2 py-0.5 rounded-full backdrop-blur-sm bg-black/60 sm:px-3 sm:py-1">
+                              <span className="text-xs font-semibold text-white">
+                               melt: {gi.melting}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Delete mode selection overlay */}
                         {deleteMode && (
                           <div 
@@ -778,6 +796,27 @@ const AdminCategoryPage = () => {
                     className="px-3 py-2 w-full text-sm rounded-lg border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 sm:px-4 sm:py-3 sm:text-base sm:rounded-xl"
                   />
                 </div>
+
+                {/* Melting Field - Input and Dropdown */}
+<div>
+  <label className="block mb-2 text-sm font-medium text-gray-700">
+    Melting (optional)
+  </label>
+  <select
+    value={newPhoto.melting}
+    onChange={(e) =>
+      setNewPhoto((p) => ({ ...p, melting: e.target.value }))
+    }
+    className="px-4 py-3 w-full rounded-xl border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+  >
+    <option value="">Select Melting</option>
+    {meltingOptions.map((option) => (
+      <option key={option} value={option}>
+        {option}
+      </option>
+    ))}
+  </select>
+</div>
 
                 <div>
                   <label className="block mb-2 text-sm font-medium text-gray-700">

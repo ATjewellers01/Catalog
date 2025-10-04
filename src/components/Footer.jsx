@@ -8,7 +8,7 @@ const Footer = () => {
       style={{
         paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 1rem)',
         height: 'auto',
-        minHeight: '4rem'
+        minHeight: '3rem'
       }}
     >
       <div className="px-4 mx-auto max-w-7xl">

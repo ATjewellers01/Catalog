@@ -4,7 +4,10 @@ import {
   Users,
   LogOut,
   ChevronLeft,
+  ChevronRight,
+  Menu,
 } from "lucide-react";
+import Footer from "../Footer";
 
 const AdminSidebar = ({ 
   activeTab, 
@@ -20,12 +23,40 @@ const AdminSidebar = ({
     { id: "users", label: "User Management", icon: Users },
   ];
 
+  const handleTabClick = (tabId) => {
+    setActiveTab(tabId);
+    if (isMobile) setSidebarOpen(false);
+  };
+
   return (
-    sidebarOpen && (
+    <>
+      {/* Mobile Overlay */}
+      {sidebarOpen && isMobile && (
+        <div
+          className="fixed inset-0 z-[60] bg-black bg-opacity-50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Mobile Menu Toggle */}
+      {isMobile && !sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="fixed top-4 left-4 z-50 p-3 bg-white rounded-xl shadow-lg border border-gray-200 transition-all hover:bg-gray-50 lg:hidden ios-touch-target"
+          title="Open Menu"
+        >
+          <Menu className="w-5 h-5 text-gray-700" />
+        </button>
+      )}
+
+      {/* Sidebar */}
       <div
-        className="flex overflow-y-auto overflow-x-hidden fixed inset-y-0 left-0 z-[70] flex-col pb-32 w-80 bg-white border-r border-gray-200 shadow-xl lg:fixed lg:inset-y-0 lg:left-0 lg:top-0 lg:h-screen lg:z-40 lg:shadow-none lg:w-72 lg:translate-x-0 lg:flex-shrink-0 scrollbar-hide"
+        className={`fixed top-0 left-0 z-[70] bg-white flex flex-col justify-between w-full sm:w-[85vw] sm:max-w-xs border-r border-gray-200 shadow-xl lg:z-40 lg:shadow-none lg:w-72 lg:max-w-none lg:flex-shrink-0 overflow-y-auto overflow-x-hidden scrollbar-hide transform transition-transform duration-300 ease-in-out ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        }`}
         style={{
-          paddingBottom: "calc(env(safe-area-inset-bottom) + 5rem)",
+          height: "100dvh",
+          paddingBottom: "max(env(safe-area-inset-bottom, 0px) + 2rem, 5rem)",
         }}
       >
         {/* Sidebar Header */}
@@ -37,14 +68,14 @@ const AdminSidebar = ({
               </h1>
               <p className="text-sm text-gray-500">Admin Dashboard</p>
             </div>
-            <div className="flex items-center space-x-2 lg:hidden">
+            {isMobile && (
               <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="p-2 rounded-lg transition-colors hover:bg-gray-100"
+                onClick={() => setSidebarOpen(false)}
+                className="p-2 rounded-lg transition-colors hover:bg-gray-100 lg:hidden ios-touch-target"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
-            </div>
+            )}
           </div>
         </div>
 
@@ -57,42 +88,82 @@ const AdminSidebar = ({
                 <div className="absolute top-0 bottom-0 left-0 w-1 bg-gradient-to-b from-amber-500 to-orange-500 rounded-r-full"></div>
               )}
               <button
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  if (isMobile) setSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-start gap-3 px-4 py-3 rounded-xl font-medium transition-colors overflow-hidden min-w-0
-                ${
+                onClick={() => handleTabClick(tab.id)}
+                className={`w-full flex items-center justify-start gap-3 px-4 py-3 rounded-xl font-medium transition-colors overflow-hidden min-w-0 ${
                   activeTab === tab.id
                     ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
                     : "text-gray-700 hover:bg-gray-100"
                 }`}
-                title={!sidebarOpen ? tab.label : ""}
+                title={tab.label}
               >
                 <tab.icon className="flex-shrink-0 w-5 h-5" />
-                {sidebarOpen && (
-                  <span className="truncate whitespace-nowrap">
-                    {tab.label}
-                  </span>
-                )}
+                <span className="truncate whitespace-nowrap">{tab.label}</span>
               </button>
             </div>
           ))}
         </nav>
 
-        {/* Logout */}
-        <div className="p-4 pb-2 border-t border-gray-200 md:pb-4">
+        {/* Footer & Logout */}
+        <div className="flex flex-col p-4 space-y-6 border-t border-gray-200">
+          {isMobile && sidebarOpen && <Footer />}
+
           <button
             onClick={handleLogout}
-            className="flex justify-center items-center px-4 py-3 space-x-2 w-full text-white bg-gray-600 rounded-xl transition-colors hover:bg-gray-700"
-            title={!sidebarOpen ? "Logout" : ""}
+            className="flex justify-center items-center px-4 py-3 w-full space-x-2 text-white bg-gray-600 rounded-xl transition-colors hover:bg-gray-700 ios-touch-target prevent-zoom"
+            title="Logout"
           >
             <LogOut className="w-5 h-5" />
-            {sidebarOpen && <span>Logout</span>}
+            <span>Logout</span>
           </button>
         </div>
       </div>
-    )
+
+      {/* Desktop Collapsed Sidebar */}
+      {!sidebarOpen && !isMobile && (
+        <div className="hidden flex-col items-center py-4 w-16 bg-white border-r border-gray-200 shadow-xl lg:flex lg:w-72 lg:max-w-none lg:translate-x-0 lg:flex-shrink-0">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 mb-4 rounded-lg transition-colors hover:bg-gray-100 ios-touch-target"
+            title="Show Sidebar"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+
+          {/* Navigation Icons */}
+          <nav className="flex-1 space-y-2">
+            {tabs.map((tab) => (
+              <div key={tab.id} className="relative">
+                {activeTab === tab.id && (
+                  <div className="absolute top-0 bottom-0 left-0 w-1 bg-gradient-to-b from-amber-500 to-orange-500 rounded-r-full"></div>
+                )}
+                <button
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-12 h-12 flex items-center justify-center rounded-xl font-medium transition-all ${
+                    activeTab === tab.id
+                      ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
+                      : "text-gray-700 hover:bg-gray-100"
+                  }`}
+                  title={tab.label}
+                >
+                  <tab.icon className="w-5 h-5" />
+                </button>
+              </div>
+            ))}
+          </nav>
+
+          {/* Logout Icon */}
+          <div className="mt-auto mb-4">
+            <button
+              onClick={handleLogout}
+              className="flex justify-center items-center w-12 h-12 text-gray-600 rounded-xl transition-colors hover:text-gray-800 hover:bg-gray-100"
+              title="Logout"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

@@ -5,7 +5,6 @@ import { useAuth } from "../context/AuthContext";
 import { useJewellery } from "../context/JewelleryContext";
 import {
   Plus,
-  Menu,
   ArrowUp,
   FileText,
 } from "lucide-react";
@@ -812,25 +811,7 @@ const fetchUsers = async () => {
   return (
     <div className="flex overflow-x-hidden flex-col pb-20 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="flex flex-1">
-        {/* Mobile Menu Button */}
-        {!sidebarOpen && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="fixed top-0 left-1 z-50 p-2 bg-white rounded-lg shadow-lg lg:hidden"
-          >
-            <Menu className="w-6 h-6" />
-          </button>
-        )}
-
-        {/* Mobile Overlay */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 z-[60] bg-black bg-opacity-50 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-
-        {/* Sidebar */}
+        {/* Sidebar - Now handles its own mobile menu button */}
         <AdminSidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -903,6 +884,7 @@ const fetchUsers = async () => {
                 updatingUserId={updatingUserId}
                 handleToggleStatus={handleToggleStatus}
                 setShowAddUserModal={setShowAddUserModal}
+                fetchUsers={fetchUsers}
               />
             )}
           </main>
@@ -958,8 +940,6 @@ const fetchUsers = async () => {
           <ArrowUp className="w-5 h-5" />
         </button>
       )}
-
-      <Footer />
     </div>
   );
 };
