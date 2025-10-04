@@ -746,7 +746,7 @@ const fetchUsers = async () => {
       // Prepare category data for Supabase
       const categoryData = {
         category_name: newCategory.name,
-        description: newCategory.description || '',
+       
         image_url: imageUrl,
       };
 

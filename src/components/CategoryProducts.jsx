@@ -237,7 +237,7 @@ const CategoryProducts = ({
       )}
 
       {/* Filter & Sort Bar */}
-      <div className="fixed top-16 left-0 right-0 z-40 p-3 border-b border-gray-200 shadow-md backdrop-blur-sm bg-white/95 md:sticky md:top-4 md:p-6 md:rounded-2xl md:border-2 md:shadow-xl md:bg-white md:border-amber-200 md:mb-8">
+      <div className="fixed top-16  left-0 right-0 z-40 p-3 border-b border-gray-200 shadow-md backdrop-blur-sm bg-white/95 md:sticky md:top-4 md:p-6 md:rounded-2xl md:border-2 md:shadow-xl md:bg-white md:border-amber-200 md:mb-8">
         <div className="flex flex-wrap gap-2 justify-between items-center md:gap-4">
           <div className="flex flex-wrap gap-2 items-center md:gap-3">
             <button
@@ -310,6 +310,8 @@ const CategoryProducts = ({
         )}
       </div>
 
+         <div className="pt-20 md:pt-0">
+
       {showFilters && <div className="block h-36 md:hidden"></div>}
 
       {productsLoading ? (
@@ -328,7 +330,7 @@ const CategoryProducts = ({
             .sort((a, b) => {
               const aNum = parseFloat((a.weight || "0").replace("g", "")) || 0;
               const bNum = parseFloat((b.weight || "0").replace("g", "")) || 0;
-              switch (sortBy) {
+              switch (sortBy) { 
                 case "weight-desc": return bNum - aNum;
                 case "name": return a.product_name.localeCompare(b.product_name);
                 case "name-desc": return b.product_name.localeCompare(a.product_name);
@@ -358,6 +360,7 @@ const CategoryProducts = ({
           <p className="text-gray-500">No products available in {selectedCategory} category</p>
         </div>
       )}
+       </div>
     </div>
   );
 };

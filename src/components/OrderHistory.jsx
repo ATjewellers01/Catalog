@@ -113,7 +113,10 @@ const OrderHistory = ({ myOrders, setActiveTab, setSelectedCategory, setCurrentP
         <h2 className="text-2xl font-bold text-gray-900">Order History</h2>
         <div className="flex items-center space-x-2 text-sm text-gray-600">
           <Calendar className="w-4 h-4" />
-          <span>{orders.length} orders • {getTotalItemsCount()} items</span>
+          <span>{orders.length} orders
+             {/* • {getTotalItemsCount()} items */}
+
+          </span>
         </div>
       </div>
 
