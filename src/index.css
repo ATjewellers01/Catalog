@@ -1,0 +1,308 @@
+/* ✅ Always import Tailwind at the very top */
+@import "tailwindcss";
+
+/* ✅ iOS Safari specific variables and fixes */
+:root {
+  /* Safe area insets for iOS */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* Prevent zoom on input focus in iOS */
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ✅ iOS Safari body fixes */
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height */
+  font-family: 'Inter', sans-serif;
+
+  /* Prevent pull-to-refresh and overscroll */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+
+  /* Better text rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ✅ Text clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-clamp: 2; /* Standard property for compatibility */
+}
+
+/* ✅ iOS Safari touch and interaction improvements */
+@media screen and (max-width: 768px) {
+  /* Ensure minimum touch targets */
+  button, a, input, select, textarea {
+    min-height: 44px; /* iOS Human Interface Guidelines minimum */
+    min-width: 44px;
+  }
+
+  /* Better button styling for touch */
+  .ios-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Prevent text selection on interactive elements */
+  button, .clickable {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Better input handling on iOS */
+  input, textarea, select {
+    -webkit-appearance: none;
+    appearance: none; /* Standard property for compatibility */
+    border-radius: 8px;
+    font-size: 16px; /* Prevents zoom on focus */
+  }
+
+  /* iOS Safari specific fixes */
+  .ios-safe-area-top {
+    padding-top: var(--safe-area-inset-top);
+  }
+
+  .ios-safe-area-bottom {
+    padding-bottom: var(--safe-area-inset-bottom);
+  }
+
+  /* Better modal handling */
+  .ios-modal {
+    padding-top: var(--safe-area-inset-top);
+    padding-bottom: var(--safe-area-inset-bottom);
+  }
+
+  /* iOS Safari specific button fixes */
+  button:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+
+  /* Prevent double-tap zoom on buttons */
+  button, .prevent-zoom {
+    touch-action: manipulation;
+  }
+
+  /* Better scrolling on mobile devices */
+  .mobile-scroll-enhanced {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #f59e0b #f3f4f6;
+  }
+
+  /* Mobile scrollbar styling */
+  .mobile-scroll-enhanced::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .mobile-scroll-enhanced::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    border-radius: 3px;
+  }
+
+  .mobile-scroll-enhanced::-webkit-scrollbar-thumb {
+    background: #f59e0b;
+    border-radius: 3px;
+    border: 1px solid #f3f4f6;
+  }
+
+  .mobile-scroll-enhanced::-webkit-scrollbar-thumb:hover {
+    background: #d97706;
+  }
+
+  /* iOS Safari specific input fixes */
+  input[type="text"], input[type="email"], input[type="password"], input[type="number"], textarea {
+    -webkit-appearance: none;
+    appearance: none;
+    background-clip: padding-box;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+  }
+
+  /* Fix for iOS Safari rounded corners on inputs */
+  input, textarea, select {
+    border-radius: 8px;
+    -webkit-border-radius: 8px;
+  }
+}
+
+/* ✅ iOS Safari viewport fixes */
+.ios-viewport-fix {
+  /* Prevent viewport jumping when iOS Safari UI changes */
+  min-height: 100dvh;
+  min-height: 100vh; /* Fallback for browsers that don't support dvh */
+
+  /* Account for dynamic viewport changes */
+  height: 100dvh;
+  height: 100vh; /* Fallback */
+}
+
+/* ✅ iOS Safari footer positioning fix */
+.ios-footer-fix {
+  /* Use dynamic viewport height to prevent footer movement */
+  min-height: calc(100dvh - 5rem);
+  min-height: calc(100vh - 5rem); /* Fallback */
+
+  /* Ensure content doesn't get hidden behind footer */
+  padding-bottom: 5rem;
+}
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* ✅ Smooth transitions */
+* {
+  transition: color 0.2s ease-in-out,
+              background-color 0.2s ease-in-out,
+              border-color 0.2s ease-in-out;
+}
+
+/* ✅ Focus styles */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #EAB308;
+  outline-offset: 2px;
+}
+
+/* ✅ Hover effects */
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+
+/* ✅ Image zoom on hover */
+.zoom-on-hover:hover img {
+  transform: scale(1.05);
+}
+
+/* ✅ Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ✅ Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #EAB308 0%, #F59E0B 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ✅ Jewelry-specific components */
+@layer components {
+  .jewelry-card {
+    @apply bg-white rounded-xl shadow-lg overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-2;
+  }
+
+  .jewelry-button {
+    @apply bg-gradient-to-r from-yellow-400 to-yellow-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-yellow-500 hover:to-yellow-700 transition-all duration-200 transform hover:scale-105;
+  }
+
+  .jewelry-input {
+    @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200;
+  }
+}
+
+/* ✅ Hidden scrollbar styles */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+/* ✅ Smooth scroll behavior */
+.smooth-scroll {
+  scroll-behavior: smooth;
+}
+
+/* ✅ Inputs UI clean-up */
+/* Hide default clear/decoration icons in search inputs */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none; /* Standard property for compatibility */
+  display: none;
+}
+
+/* Hide number input spin buttons */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none; /* Standard property for compatibility */
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield; /* Firefox */
+}
+
+/* ✅ Subtle fade-in animation helper (paired with Tailwind's animate-fade-in) */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
