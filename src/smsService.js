@@ -2,7 +2,7 @@
 export const sendOrderSMS = async (orderData) => {
   try {
     // Admin phone numbers - you can add multiple numbers separated by commas
-    const adminNumbers = ['+919993758368']; // Replace with actual admin numbers
+    const adminNumbers = ['+919993758368','7000041821']; // Replace with actual admin numbers
     
     const message = `🛍️ NEW ORDER ALERT!
 Order ID: #${orderData.orderId}
