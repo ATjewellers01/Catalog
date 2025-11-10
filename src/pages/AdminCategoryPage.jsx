@@ -32,12 +32,13 @@ const AdminCategoryPage = () => {
     subcategory: "",
     description: "",
     weight: "",
-    melting: "", // Add melting field
+    melting: "",
     image: "",
+    size: "",
   });
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
-  const [categories, setCategories] = useState([]); // Add categories state
+  const [categories, setCategories] = useState([]);
   
   // Delete mode states
   const [deleteMode, setDeleteMode] = useState(false);
@@ -99,9 +100,18 @@ const AdminCategoryPage = () => {
 
   // Get category ID by category name
   const getCategoryId = (categoryName) => {
-    const category = categories.find(cat => cat.category_name === categoryName);
+    if (!categoryName || !categories.length) return null;
+    
+    const category = categories.find(cat => {
+      const dbName = cat.category_name?.toLowerCase().trim();
+      const inputName = categoryName?.toLowerCase().trim();
+      
+      return dbName === inputName;
+    });
+    
     return category ? category.id : null;
   };
+
 
   // Clear all filters
   const clearFilters = () => {
@@ -281,6 +291,7 @@ const AdminCategoryPage = () => {
       set: "SET",
       men: "Man Collection",
       "man collection": "Man Collection",
+      bindiya: "Bindiya", // Add Bindiya mapping
     };
     const key = decodeURIComponent(name).replace(/-/g, " ").toLowerCase();
     return map[key] || decodeURIComponent(name);
@@ -289,6 +300,14 @@ const AdminCategoryPage = () => {
   const [selectedCategory, setSelectedCategory] = useState(
     normalizeCategoryName(categoryName)
   );
+
+  
+  // Debug useEffect
+  useEffect(() => {
+    console.log('Categories loaded:', categories);
+    console.log('Selected category:', selectedCategory);
+    console.log('Category ID for selected category:', getCategoryId(selectedCategory));
+  }, [categories, selectedCategory]);
 
   // Flattened and filtered items for the gallery (by weight, search, and sort)
   const galleryItems = useMemo(() => {
@@ -314,7 +333,7 @@ const AdminCategoryPage = () => {
           product.description,
           product.product_name,
           product.category_name,
-          product.melting // Include melting in search
+          product.melting
         ]
           .filter(Boolean)
           .join(' ')
@@ -332,10 +351,10 @@ const AdminCategoryPage = () => {
         weightNum,
         name: product.product_name || `${selectedCategory} item`,
         category: product.category_name,
-        category_id: product.category_id, // Include category_id
-        status: product.status, // Include status
-        isBooked: product.status === 'booked', // Add isBooked flag
-        melting: product.melting || "" // Include melting
+        category_id: product.category_id,
+        status: product.status,
+        isBooked: product.status === 'booked',
+        melting: product.melting || ""
       };
     }).filter(Boolean);
 
@@ -369,11 +388,12 @@ const AdminCategoryPage = () => {
   };
 
   const resetPhotoForm = () => {
-    setNewPhoto({ subcategory: "", description: "", weight: "", melting: "", image: "" });
+    setNewPhoto({ subcategory: "", description: "", weight: "", melting: "", image: "", size: "" });
     setPhotoPreview("");
     setShowAddPhotoModal(false);
   };
 
+  // Fixed handleAddPhotoSubmit function
   const handleAddPhotoSubmit = async (e) => {
     e.preventDefault();
 
@@ -387,6 +407,9 @@ const AdminCategoryPage = () => {
       const fileName = `${Date.now()}-${file.name}`;
       const filePath = `${selectedCategory}/${fileName}`;
 
+      console.log("Uploading image to:", filePath);
+
+      // Upload file to Supabase storage
       const { error: uploadError } = await supabase.storage
         .from("product_image")
         .upload(filePath, file, {
@@ -395,49 +418,71 @@ const AdminCategoryPage = () => {
         });
 
       if (uploadError) {
-        console.error("Upload error:", uploadError.message);
-        alert("Failed to upload image.");
+        console.error("Upload error:", uploadError);
+        alert(`Failed to upload image: ${uploadError.message}`);
         return;
       }
 
+      // Get public URL
       const { data: publicUrlData } = supabase.storage
         .from("product_image")
         .getPublicUrl(filePath);
 
       const imageUrl = publicUrlData.publicUrl;
+      console.log("Image uploaded successfully:", imageUrl);
 
-      // Get category ID
-      const categoryId = getCategoryId(selectedCategory);
-
-      if (!categoryId) {
-        alert("Error: Category not found. Please make sure the category exists.");
-        return;
+      // Get category ID - FIXED: Use the actual category from database
+      let categoryId = getCategoryId(selectedCategory);
+      
+      // If category not found, try to find it in categories with different matching
+      if (!categoryId && categories.length > 0) {
+        const foundCategory = categories.find(cat => 
+          cat.category_name.toLowerCase().includes(selectedCategory.toLowerCase()) ||
+          selectedCategory.toLowerCase().includes(cat.category_name.toLowerCase())
+        );
+        categoryId = foundCategory?.id;
       }
 
-      const { error } = await supabase.from("products").insert([
-        {
-          category_name: selectedCategory,
-          category_id: categoryId, // Add category ID here
-          product_name: selectedCategory,
-          product_image_url: imageUrl,
-          weight: newPhoto.weight || "",
-          melting: newPhoto.melting || "", // Add melting field
-          status: null // Default status is available
-        },
-      ]);
+      console.log("Category ID found:", categoryId);
 
-      if (error) {
-        console.error("Insert error:", error.message);
-        alert("Failed to save product.");
+      // Prepare product data
+      const productData = {
+        category_name: selectedCategory,
+        product_name: selectedCategory,
+        product_image_url: imageUrl,
+        weight: newPhoto.weight || "",
+        melting: newPhoto.melting || "",
+        size: newPhoto.size || "",
+        status: null
+      };
+
+      // Only add category_id if we found it
+      if (categoryId) {
+        productData.category_id = categoryId;
+      }
+
+      console.log("Inserting product data:", productData);
+
+      // Insert into products table
+      const { error: insertError } = await supabase
+        .from("products")
+        .insert([productData]);
+
+      if (insertError) {
+        console.error("Insert error:", insertError);
+        alert(`Failed to save product: ${insertError.message}`);
         return;
       }
 
       alert("Photo added successfully!");
+      
+      // Refresh products and reset form
       await fetchProducts();
       resetPhotoForm();
+      
     } catch (err) {
       console.error("Unexpected error:", err);
-      alert("Something went wrong while adding the photo.");
+      alert("Something went wrong while adding the photo. Please try again.");
     }
   };
 
@@ -471,8 +516,6 @@ const AdminCategoryPage = () => {
       </div>
     );
   }
-
-
 
   return (
     <div className="pb-20 min-h-screen bg-gray-50">
@@ -639,7 +682,7 @@ const AdminCategoryPage = () => {
                   </div>
                 )}
 
-                {/* FILTER/SORT CONTROLS - Positioned below the action buttons */}
+                {/* FILTER/SORT CONTROLS */}
                 <div className="sticky top-17 z-30 p-4 mb-4 bg-white rounded-lg border border-gray-200 shadow-sm md:top-4 md:rounded-2xl md:border-2 md:shadow-xl md:border-amber-200">
                   <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center">
                     {/* First Row: Filter Controls */}
@@ -736,9 +779,6 @@ const AdminCategoryPage = () => {
                               />
                             </div>
                           </div>
-                  
-                          {/* Search Field */}
-                        
                         </div>
                       </div>
 
@@ -766,12 +806,8 @@ const AdminCategoryPage = () => {
                         </div>
                       </div>
 
-                     
-
                       {/* Quick Actions Row */}
                       <div className="flex justify-between items-center mt-4">
-                     
-                        
                         <div className="text-sm text-gray-500">
                           {galleryItems.length} items match
                         </div>
@@ -779,7 +815,6 @@ const AdminCategoryPage = () => {
                     </div>
                   )}
                 </div>
-
 
                 {/* Items Grid */}
                 <div className="grid grid-cols-1 gap-3 mt-4 sm:gap-4 sm:grid-cols-1 md:grid-cols-3 lg:grid-cols-4">
@@ -901,12 +936,10 @@ const AdminCategoryPage = () => {
                             </div>
                           </div>
                         )}
-                     
                       </div>
                     </div>
                   ))}
                 </div>
-
               </div>
             </div>
           ) : (
@@ -976,6 +1009,21 @@ const AdminCategoryPage = () => {
                     value={newPhoto.weight}
                     onChange={(e) =>
                       setNewPhoto((p) => ({ ...p, weight: e.target.value }))
+                    }
+                    placeholder="e.g. 12"
+                    className="px-3 py-2 w-full text-sm rounded-lg border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 sm:px-4 sm:py-3 sm:text-base sm:rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block mb-2 text-sm font-medium text-gray-700">
+                    Size (optional)
+                  </label>
+                  <input
+                    type="number"
+                    value={newPhoto.size}
+                    onChange={(e) =>
+                      setNewPhoto((p) => ({ ...p, size: e.target.value }))
                     }
                     placeholder="e.g. 12"
                     className="px-3 py-2 w-full text-sm rounded-lg border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 sm:px-4 sm:py-3 sm:text-base sm:rounded-xl"
