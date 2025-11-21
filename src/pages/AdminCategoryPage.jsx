@@ -354,7 +354,8 @@ const AdminCategoryPage = () => {
         category_id: product.category_id,
         status: product.status,
         isBooked: product.status === 'booked',
-        melting: product.melting || ""
+        melting: product.melting || "",
+        size:product.size||"",
       };
     }).filter(Boolean);
 
@@ -896,6 +897,16 @@ const AdminCategoryPage = () => {
                             <div className="px-2 py-0.5 rounded-full backdrop-blur-sm bg-black/60 sm:px-3 sm:py-1">
                               <span className="text-xs font-semibold text-white">
                                melt: {gi.melting}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                         {gi.size && (
+                          <div className="absolute bottom-2 right-2 z-20">
+                            <div className="px-2 py-0.5 rounded-full backdrop-blur-sm bg-black/60 sm:px-3 sm:py-1">
+                              <span className="text-xs font-semibold text-white">
+                               size: {gi.size}
                               </span>
                             </div>
                           </div>
