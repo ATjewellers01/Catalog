@@ -1,4 +1,4 @@
-import { Trash2, X, Share2 } from "lucide-react";
+import { Trash2, X, Share2, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import supabase from "../../SupabaseClient";
@@ -31,6 +31,7 @@ const CategoriesTab = ({
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [sharing, setSharing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Fetch products from Supabase
   useEffect(() => {
@@ -91,13 +92,29 @@ const CategoriesTab = ({
     setImageLoadErrors(new Set());
   }, [categoriesData]);
 
-  // Calculate product counts by status for each category - UPDATED
+  // Filter users based on search query
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return users;
+    }
+    
+    const query = searchQuery.toLowerCase().trim();
+    return users.filter(user => {
+      const userName = (user.user_name || '').toLowerCase();
+      const phoneNumber = (user.phone_number || '').toLowerCase();
+      
+      return userName.includes(query) || phoneNumber.includes(query);
+    });
+  }, [users, searchQuery]);
+
+  // Calculate product counts by status for each category - FIXED VERSION
   const getCategoryProductCounts = (categoryName) => {
     const productsToCheck = products.length > 0 ? products : jewellery;
     
     const categoryProducts = productsToCheck.filter(item => {
       const itemCategory = item.category_name || item.category;
-      return itemCategory === categoryName;
+      const match = itemCategory?.toString().trim().toLowerCase() === categoryName?.toString().trim().toLowerCase();
+      return match;
     });
 
     const pendingCount = categoryProducts.filter(item => 
@@ -144,13 +161,18 @@ const CategoriesTab = ({
     setSelectedUsers(newSelected);
   };
 
-  // Select all users
-  const selectAllUsers = () => {
-    if (selectedUsers.size === users.length) {
-      setSelectedUsers(new Set());
+  // Select all filtered users
+  const selectAllFilteredUsers = () => {
+    if (selectedUsers.size === filteredUsers.length) {
+      // Deselect all filtered users
+      const newSelected = new Set(selectedUsers);
+      filteredUsers.forEach(user => newSelected.delete(user.id));
+      setSelectedUsers(newSelected);
     } else {
-      const allUserIds = users.map(user => user.id);
-      setSelectedUsers(new Set(allUserIds));
+      // Select all filtered users
+      const newSelected = new Set(selectedUsers);
+      filteredUsers.forEach(user => newSelected.add(user.id));
+      setSelectedUsers(newSelected);
     }
   };
 
@@ -163,13 +185,10 @@ const CategoriesTab = ({
 
     setSharing(true);
     try {
-     
       // Step 2: Prepare data for insertion
       const shareData = selectedUserData.map(user => ({
-    
         name: user.user_name || 'Unnamed User',
         phone_number: user.phone_number || null,
-        // Add any other fields you want to store
       }));
 
       // Step 3: Insert new selected users
@@ -187,6 +206,7 @@ const CategoriesTab = ({
       alert(`Categories shared with ${selectedUserData.length} user(s)! Data updated in share_user_list table.`);
       setShowShareModal(false);
       setSelectedUsers(new Set());
+      setSearchQuery(""); // Clear search on close
       
     } catch (error) {
       console.error('Error sharing categories:', error);
@@ -276,6 +296,13 @@ const CategoriesTab = ({
     }
     const coverImage = getCategoryCover(category.category_name);
     return coverImage || asset("download.jpg");
+  };
+
+  // Handle modal close
+  const handleModalClose = () => {
+    setShowShareModal(false);
+    setSelectedUsers(new Set());
+    setSearchQuery("");
   };
 
   // Show loading if both categories and products are loading
@@ -413,31 +440,82 @@ const CategoriesTab = ({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full max-h-[80vh] overflow-hidden">
             <div className="p-4 border-b">
-              <h3 className="text-lg font-semibold">Share Categories with Users</h3>
-              <p className="text-sm text-gray-600 mt-1">Select users to share categories with</p>
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-semibold">Share Categories with Users</h3>
+                  <p className="text-sm text-gray-600 mt-1">Select users to share categories with</p>
+                </div>
+                <button
+                  onClick={handleModalClose}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            {/* Search Bar */}
+            <div className="p-4 border-b bg-gray-50">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search users by name or phone number..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              
+              {searchQuery && (
+                <div className="mt-2 text-xs text-gray-500">
+                  Found {filteredUsers.length} user(s) matching "{searchQuery}"
+                </div>
+              )}
             </div>
             
             <div className="p-4 border-b">
               <div className="flex justify-between items-center mb-3">
-                <span className="text-sm font-medium">
-                  {selectedUsers.size} user(s) selected
-                </span>
-                <button
-                  onClick={selectAllUsers}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  {selectedUsers.size === users.length ? "Deselect All" : "Select All"}
-                </button>
+                <div>
+                  <span className="text-sm font-medium">
+                    {selectedUsers.size} user(s) selected
+                  </span>
+                  {searchQuery && filteredUsers.length > 0 && (
+                    <span className="ml-2 text-xs text-gray-500">
+                      ({filteredUsers.length} in search results)
+                    </span>
+                  )}
+                </div>
+                {filteredUsers.length > 0 && (
+                  <button
+                    onClick={selectAllFilteredUsers}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    {selectedUsers.size === filteredUsers.length ? 
+                      "Deselect All in Search" : 
+                      "Select All in Search"
+                    }
+                  </button>
+                )}
               </div>
               
               <div className="max-h-60 overflow-y-auto">
                 {loadingUsers ? (
-                  <div className="flex justify-center py-4">
+                  <div className="flex justify-center py-8">
                     <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
+                    <span className="ml-3 text-gray-600">Loading users...</span>
                   </div>
-                ) : users.length > 0 ? (
+                ) : filteredUsers.length > 0 ? (
                   <div className="space-y-2">
-                    {users.map((user) => (
+                    {filteredUsers.map((user) => (
                       <div
                         key={user.id}
                         className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${
@@ -467,8 +545,26 @@ const CategoriesTab = ({
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-4 text-gray-500">
-                    No users found
+                  <div className="text-center py-8">
+                    {searchQuery ? (
+                      <div>
+                        <Search className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                        <p className="text-gray-500">No users found matching "{searchQuery}"</p>
+                        <button
+                          onClick={() => setSearchQuery("")}
+                          className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          Clear search
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                          <span className="text-gray-400 text-lg">👥</span>
+                        </div>
+                        <p className="text-gray-500">No users found</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -476,10 +572,7 @@ const CategoriesTab = ({
             
             <div className="p-4 flex justify-end space-x-3">
               <button
-                onClick={() => {
-                  setShowShareModal(false);
-                  setSelectedUsers(new Set());
-                }}
+                onClick={handleModalClose}
                 className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                 disabled={sharing}
               >
