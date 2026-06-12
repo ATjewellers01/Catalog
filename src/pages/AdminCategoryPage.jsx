@@ -74,17 +74,36 @@ const AdminCategoryPage = () => {
     try {
       setLoadingProducts(true);
       
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let allProducts = [];
+      let from = 0;
+      const step = 1000;
+      let fetchMore = true;
 
-      if (error) {
-        console.error('Error fetching products:', error);
-        return;
+      while (fetchMore) {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(from, from + step - 1);
+
+        if (error) {
+          console.error('Error fetching products:', error);
+          break;
+        }
+
+        if (data && data.length > 0) {
+          allProducts = [...allProducts, ...data];
+          if (data.length < step) {
+            fetchMore = false;
+          } else {
+            from += step;
+          }
+        } else {
+          fetchMore = false;
+        }
       }
 
-      setProducts(data || []);
+      setProducts(allProducts);
     } catch (err) {
       console.error('Unexpected error fetching products:', err);
     } finally {
